@@ -384,6 +384,29 @@ contract BasicStrategyTest is BaseFountfiTest {
         vm.stopPrank();
     }
 
+    function test_CallSelf() public {
+        vm.startPrank(manager);
+        vm.expectRevert(IStrategy.InvalidAddress.selector);
+        strategy.call(address(strategy), 0, "");
+        vm.stopPrank();
+    }
+
+    function test_CallTokenRevert() public {
+        vm.startPrank(manager);
+        vm.expectRevert(IStrategy.CannotCallToken.selector);
+        strategy.call(strategy.sToken(), 0, "");
+        vm.stopPrank();
+    }
+
+    function test_DelegateCallFailure() public {
+        DelegateCallReverter reverter = new DelegateCallReverter();
+        vm.startPrank(manager);
+        bytes memory callData = abi.encodeWithSignature("willRevert()");
+        (bool success, ) = strategy.delegateCall(address(reverter), callData);
+        assertFalse(success, "Delegate call should fail");
+        vm.stopPrank();
+    }
+
     function test_DelegateCall() public {
         // Deploy a test contract that we'll delegate call to
         DelegateCallTest delegate_contract = new DelegateCallTest();
@@ -468,4 +491,11 @@ contract DelegateCallTest {
 // Helper contract for testing payable calls
 contract PayableTest {
     receive() external payable {}
+}
+
+// Helper contract that always reverts when called
+contract DelegateCallReverter {
+    function willRevert() external pure {
+        revert("fail");
+    }
 }
