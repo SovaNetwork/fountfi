@@ -7,7 +7,7 @@
 - Test (verbose): `forge test -vvv`
 - Format: `forge fmt`
 - Gas snapshot: `forge snapshot`
-- Deploy: `forge script script/RegistryDeploy.s.sol:RegistryDeployScript --rpc-url <url> --private-key <key>`
+- Deploy: `forge script script/DeployProtocol.s.sol:DeployProtocolScript --rpc-url <url> --private-key <key>`
 
 ## Code Style Guidelines
 - **Pragma**: Use `0.8.25` or higher
