@@ -36,7 +36,7 @@ contract DepositCapHook is BaseHook {
     /// @notice Deposit cap (in assets)
     uint256 public depositCap;
 
-    /// @notice Total deposited assets
+    /// @notice Total deposited assets (principal only, not profits)
     uint256 public totalDeposited;
 
     /*//////////////////////////////////////////////////////////////
@@ -47,10 +47,10 @@ contract DepositCapHook is BaseHook {
      * @notice Constructor
      */
     constructor(address _token, uint256 initialCap) BaseHook("DepositCapHook-1.0") {
-        if (token == address(0)) revert ZeroAddress();
+        if (_token == address(0)) revert ZeroAddress();
 
-        depositCap = initialCap;
         token = _token;
+        depositCap = initialCap;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -63,7 +63,12 @@ contract DepositCapHook is BaseHook {
      * @param newCap Maximum amount of assets that can be deposited (0 means no cap)
      */
     function setDepositCap(uint256 newCap) external {
-        if (msg.sender != token.strategy()) revert Unauthorized();
+        // Get strategy address from token
+        (bool success, bytes memory data) = token.staticcall(abi.encodeWithSignature("strategy()"));
+        if (!success || data.length < 32) revert Unauthorized();
+        address strategy = abi.decode(data, (address));
+        
+        if (msg.sender != strategy) revert Unauthorized();
 
         emit DepositCapSet(newCap, depositCap);
 
@@ -75,8 +80,7 @@ contract DepositCapHook is BaseHook {
     //////////////////////////////////////////////////////////////*/
 
     /**
-     * @notice Get the available deposit capacity for a token
-     * @param token Address of the token
+     * @notice Get the available deposit capacity for the token
      * @return Available capacity (0 if cap exceeded or no cap set)
      */
     function getAvailableCapacity() external view returns (uint256) {
@@ -90,7 +94,6 @@ contract DepositCapHook is BaseHook {
 
     /**
      * @notice Check if a deposit amount would exceed the cap
-     * @param token Address of the token
      * @param assets Amount of assets to deposit
      * @return Whether the deposit is allowed
      */
@@ -106,10 +109,7 @@ contract DepositCapHook is BaseHook {
 
     /**
      * @notice Hook executed before a deposit operation
-     * @param token Address of the token
-     * @param user Address initiating the deposit
      * @param assets Amount of assets to deposit
-     * @param receiver Address receiving the shares
      * @return IHook.HookOutput Result of the hook evaluation
      */
     function onBeforeDeposit(
@@ -122,7 +122,6 @@ contract DepositCapHook is BaseHook {
 
         // Check if deposit would exceed cap
         if (newTotal > depositCap) {
-            uint256 available = depositCap > currentDeposited ? depositCap - currentDeposited : 0;
             return IHook.HookOutput({
                 approved: false,
                 reason: "DepositCap: limit exceeded"
@@ -138,11 +137,7 @@ contract DepositCapHook is BaseHook {
 
     /**
      * @notice Hook executed before a withdraw operation
-     * @param token Address of the token
-     * @param by Address initiating the withdrawal
      * @param assets Amount of assets to withdraw
-     * @param to Address receiving the assets
-     * @param owner Address owning the shares
      * @return IHook.HookOutput Result of the hook evaluation
      */
     function onBeforeWithdraw(
@@ -152,14 +147,51 @@ contract DepositCapHook is BaseHook {
         address,
         address
     ) public override returns (IHook.HookOutput memory) {
-        // Decrement the tracked deposits to account for withdrawals
-        // This allows profits to increase the available deposit capacity
-        uint256 newTotal = assets > totalDeposited ? 0 : totalDeposited - assets;
+        // Calculate how much of the withdrawal is principal vs profit
+        // We can determine this by comparing total assets to total deposited principal
+        uint256 totalAssets = _getTotalAssets();
+        
+        if (totalAssets > totalDeposited) {
+            // There are profits, so some withdrawal could be profit
+            uint256 totalProfits = totalAssets - totalDeposited;
+            
+            if (assets <= totalProfits) {
+                // Withdrawal is entirely profit, no principal reduction
+                emit WithdrawalTracked(0, totalDeposited);
+                return IHook.HookOutput({approved: true, reason: ""});
+            } else {
+                // Withdrawal includes some principal
+                uint256 principalWithdrawn = assets - totalProfits;
+                uint256 newTotal = principalWithdrawn > totalDeposited ? 0 : totalDeposited - principalWithdrawn;
+                totalDeposited = newTotal;
+                emit WithdrawalTracked(principalWithdrawn, newTotal);
+                return IHook.HookOutput({approved: true, reason: ""});
+            }
+        } else {
+            // No profits, all withdrawal is principal
+            uint256 newTotal = assets > totalDeposited ? 0 : totalDeposited - assets;
+            totalDeposited = newTotal;
+            emit WithdrawalTracked(assets, newTotal);
+            return IHook.HookOutput({approved: true, reason: ""});
+        }
+    }
 
-        totalDeposited = newTotal;
+    /*//////////////////////////////////////////////////////////////
+                            INTERNAL FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
 
-        emit WithdrawalTracked(token, assets, newTotal);
-
-        return IHook.HookOutput({approved: true, reason: ""});
+    /**
+     * @notice Get the total assets managed by the strategy
+     * @return Total assets under management
+     */
+    function _getTotalAssets() internal view returns (uint256) {
+        // Call totalAssets() on the token to get current total managed assets
+        (bool success, bytes memory data) = token.staticcall(abi.encodeWithSignature("totalAssets()"));
+        
+        if (!success || data.length < 32) {
+            return 0; // Fallback to 0 if call fails
+        }
+        
+        return abi.decode(data, (uint256));
     }
 }
