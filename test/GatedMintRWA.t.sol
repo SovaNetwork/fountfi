@@ -142,8 +142,12 @@ contract GatedMintRWATest is BaseFountfiTest {
         assertEq(pendingDeposits.length, 1);
 
         // Verify deposit details
-        (address depositor, address recipient, uint256 amount, uint256 expTime, uint8 state) =
-            gatedToken.getDepositDetails(pendingDeposits[0]);
+        GatedMintEscrow.PendingDeposit memory deposit = escrow.getPendingDeposit(pendingDeposits[0]);
+        address depositor = deposit.depositor;
+        address recipient = deposit.recipient;
+        uint256 amount = deposit.assetAmount;
+        uint256 expTime = deposit.expirationTime;
+        uint8 state = uint8(deposit.state);
 
         assertEq(depositor, alice);
         assertEq(recipient, alice);
@@ -162,7 +166,9 @@ contract GatedMintRWATest is BaseFountfiTest {
         bytes32[] memory pendingDeposits = gatedToken.getUserPendingDeposits(alice);
         assertEq(pendingDeposits.length, 1);
 
-        (address depositor, address recipient,,,) = gatedToken.getDepositDetails(pendingDeposits[0]);
+        GatedMintEscrow.PendingDeposit memory deposit = escrow.getPendingDeposit(pendingDeposits[0]);
+        address depositor = deposit.depositor;
+        address recipient = deposit.recipient;
 
         assertEq(depositor, alice);
         assertEq(recipient, bob);
@@ -187,8 +193,12 @@ contract GatedMintRWATest is BaseFountfiTest {
         assertEq(pendingDeposits.length, 1);
 
         // Verify deposit details
-        (address depositor, address recipient, uint256 amount, uint256 expTime, uint8 state) =
-            gatedToken.getDepositDetails(pendingDeposits[0]);
+        GatedMintEscrow.PendingDeposit memory deposit = escrow.getPendingDeposit(pendingDeposits[0]);
+        address depositor = deposit.depositor;
+        address recipient = deposit.recipient;
+        uint256 amount = deposit.assetAmount;
+        uint256 expTime = deposit.expirationTime;
+        uint8 state = uint8(deposit.state);
 
         assertEq(depositor, alice);
         assertEq(recipient, alice);
@@ -338,32 +348,6 @@ contract GatedMintRWATest is BaseFountfiTest {
         bytes32[] memory pendingDeposits = gatedToken.getUserPendingDeposits(alice);
         assertEq(pendingDeposits.length, 1);
         assertEq(pendingDeposits[0], deposit1);
-    }
-
-    function test_GetDepositDetails() public {
-        bytes32 depositId = _createPendingDeposit(alice, bob, DEPOSIT_AMOUNT);
-
-        (address depositor, address recipient, uint256 amount, uint256 expTime, uint8 state) =
-            gatedToken.getDepositDetails(depositId);
-
-        assertEq(depositor, alice);
-        assertEq(recipient, bob);
-        assertEq(amount, DEPOSIT_AMOUNT);
-        assertGt(expTime, block.timestamp);
-        assertEq(state, 0); // PENDING
-    }
-
-    function test_GetDepositDetails_NonExistent() public view {
-        bytes32 invalidDepositId = keccak256("invalid");
-
-        (address depositor, address recipient, uint256 amount, uint256 expTime, uint8 state) =
-            gatedToken.getDepositDetails(invalidDepositId);
-
-        assertEq(depositor, address(0));
-        assertEq(recipient, address(0));
-        assertEq(amount, 0);
-        assertEq(expTime, 0);
-        assertEq(state, 0);
     }
 
     // ============ Integration Tests ============

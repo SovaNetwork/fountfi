@@ -8,8 +8,6 @@ solc = "0.8.25"
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
 
 optimizer = true
-optimizer_runs = 200
-
-rpc_url = "https://rpc.testnet.sova.io"
+optimizer_runs = 20
 
 no_match_coverage = "(script/|test/|mocks/)"
