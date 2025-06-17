@@ -35,7 +35,7 @@ contract DirectDepositStrategy is ReportedStrategy, IDirectDepositStrategy {
      * @param manager_ Address of the manager
      * @param asset_ Address of the underlying asset
      * @param assetDecimals_ Decimals of the asset
-     * @param initData Encoded issuer wallet address
+     * @param initData Encoded reporter and issuer wallet addresses
      */
     function initialize(
         string calldata name_,
@@ -46,27 +46,16 @@ contract DirectDepositStrategy is ReportedStrategy, IDirectDepositStrategy {
         uint8 assetDecimals_,
         bytes memory initData
     ) public virtual override(ReportedStrategy, IStrategy) {
-        // Prevent re-initialization
-        if (_initialized) revert AlreadyInitialized();
-        _initialized = true;
-
-        if (manager_ == address(0)) revert InvalidAddress();
-        if (asset_ == address(0)) revert InvalidAddress();
-
-        // Decode issuer wallet from initData
-        address issuerWallet_ = abi.decode(initData, (address));
+        // Decode both reporter and issuer wallet from initData
+        (address reporter_, address issuerWallet_) = abi.decode(initData, (address, address));
         if (issuerWallet_ == address(0)) revert InvalidIssuerWallet();
 
-        // Set up strategy configuration
-        manager = manager_;
-        asset = asset_;
+        // Set issuer wallet before calling parent initialize
         issuerWallet = issuerWallet_;
-        _initializeRoleManager(roleManager_);
 
-        // Deploy DirectDepositRWA token
-        sToken = _deployToken(name_, symbol_, asset, assetDecimals_);
+        // Call parent initialize with reporter encoded
+        super.initialize(name_, symbol_, roleManager_, manager_, asset_, assetDecimals_, abi.encode(reporter_));
 
-        emit StrategyInitialized(address(0), manager, asset, sToken);
         emit IssuerWalletSet(address(0), issuerWallet_);
     }
 
@@ -127,5 +116,64 @@ contract DirectDepositStrategy is ReportedStrategy, IDirectDepositStrategy {
      */
     function batchMintShares(address[] calldata recipients, uint256[] calldata shares) external override onlyManager {
         DirectDepositRWA(sToken).batchMintShares(recipients, shares);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                    DEPOSIT MANAGEMENT FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
+
+    /**
+     * @notice Accept a pending deposit and mint shares
+     * @param depositId The deposit ID to accept
+     */
+    function acceptDeposit(bytes32 depositId) external override onlyManager {
+        DirectDepositRWA(sToken).acceptDeposit(depositId);
+    }
+
+    /**
+     * @notice Accept multiple pending deposits as a batch
+     * @param depositIds Array of deposit IDs to accept
+     */
+    function batchAcceptDeposits(bytes32[] calldata depositIds) external override onlyManager {
+        DirectDepositRWA(sToken).batchAcceptDeposits(depositIds);
+    }
+
+    /**
+     * @notice Refund a pending deposit
+     * @dev Must call fundRefund first to ensure funds are available
+     * @param depositId The deposit ID to refund
+     */
+    function refundDeposit(bytes32 depositId) external override onlyManager {
+        DirectDepositRWA(sToken).refundDeposit(depositId);
+    }
+
+    /**
+     * @notice Sets the period after which deposits expire
+     * @param newExpirationPeriod New expiration period in seconds
+     */
+    function setDepositExpirationPeriod(uint256 newExpirationPeriod) external override onlyManager {
+        DirectDepositRWA(sToken).setDepositExpirationPeriod(newExpirationPeriod);
+    }
+
+    /**
+     * @notice Fund the token contract for refunds
+     * @dev Transfer assets from issuer wallet to token for refunding deposits
+     * @param amount Amount of assets to transfer
+     */
+    function fundRefund(uint256 amount) external onlyManager {
+        SafeTransferLib.safeTransferFrom(asset, issuerWallet, sToken, amount);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                        WITHDRAWAL SUPPORT
+    //////////////////////////////////////////////////////////////*/
+
+    /**
+     * @notice Transfer assets from issuer wallet to strategy for withdrawals
+     * @dev Issuer must approve strategy to spend assets before calling
+     * @param amount Amount of assets to transfer
+     */
+    function fundWithdrawals(uint256 amount) external onlyManager {
+        SafeTransferLib.safeTransferFrom(asset, issuerWallet, address(this), amount);
     }
 }

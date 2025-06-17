@@ -34,4 +34,8 @@ interface IDirectDepositStrategy is IStrategy {
     function setIssuerWallet(address newWallet) external;
     function mintShares(address recipient, uint256 shares) external;
     function batchMintShares(address[] calldata recipients, uint256[] calldata shares) external;
+    function acceptDeposit(bytes32 depositId) external;
+    function batchAcceptDeposits(bytes32[] calldata depositIds) external;
+    function refundDeposit(bytes32 depositId) external;
+    function setDepositExpirationPeriod(uint256 newExpirationPeriod) external;
 }
