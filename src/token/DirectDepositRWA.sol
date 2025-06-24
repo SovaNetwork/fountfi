@@ -5,6 +5,10 @@ import {tRWA} from "./tRWA.sol";
 import {SafeTransferLib} from "solady/utils/SafeTransferLib.sol";
 import {IDirectDepositStrategy} from "../strategy/IDirectDepositStrategy.sol";
 import {IHook} from "../hooks/IHook.sol";
+import {Conduit} from "../conduit/Conduit.sol";
+import {RoleManaged} from "../auth/RoleManaged.sol";
+import {IRegistry} from "../registry/IRegistry.sol";
+
 
 /**
  * @title DirectDepositRWA
@@ -31,15 +35,13 @@ contract DirectDepositRWA is tRWA {
                             EVENTS
     //////////////////////////////////////////////////////////////*/
 
-    event DirectDeposit(address indexed from, address indexed issuerWallet, uint256 assets);
-    event DepositPending(
+    event DirectDepositPending(
         bytes32 indexed depositId, address indexed depositor, address indexed recipient, uint256 assets
     );
     event DepositAccepted(bytes32 indexed depositId, address indexed recipient, uint256 assets, uint256 shares);
     event DepositRefunded(bytes32 indexed depositId, address indexed depositor, uint256 assets);
     event DepositReclaimed(bytes32 indexed depositId, address indexed depositor, uint256 assets);
     event BatchDepositsAccepted(bytes32[] depositIds, uint256 totalAssets, uint256 totalShares);
-    event DepositExpirationPeriodUpdated(uint256 oldPeriod, uint256 newPeriod);
 
     /*//////////////////////////////////////////////////////////////
                             STATE
@@ -57,7 +59,6 @@ contract DirectDepositRWA is tRWA {
         address depositor; // Address that initiated the deposit
         address recipient; // Address that will receive shares if approved
         uint256 assetAmount; // Amount of assets deposited
-        uint256 expirationTime; // Timestamp after which deposit can be reclaimed
         DepositState state; // Current state of the deposit
     }
 
@@ -72,9 +73,6 @@ contract DirectDepositRWA is tRWA {
 
     /// @notice Monotonically-increasing sequence number to guarantee unique depositIds
     uint256 private sequenceNum;
-
-    /// @notice Deposit expiration time (in seconds) - default to 7 days
-    uint256 public depositExpirationPeriod = 7 days;
 
     /// @notice Maximum deposit expiration period
     uint256 public constant MAX_DEPOSIT_EXPIRATION_PERIOD = 30 days;
@@ -94,47 +92,33 @@ contract DirectDepositRWA is tRWA {
     {}
 
     /*//////////////////////////////////////////////////////////////
-                        CONFIGURATION FUNCTIONS
-    //////////////////////////////////////////////////////////////*/
-
-    /**
-     * @notice Sets the period after which deposits expire and can be reclaimed
-     * @param newExpirationPeriod New expiration period in seconds
-     */
-    function setDepositExpirationPeriod(uint256 newExpirationPeriod) external onlyStrategy {
-        if (newExpirationPeriod == 0) revert InvalidExpirationPeriod();
-        if (newExpirationPeriod > MAX_DEPOSIT_EXPIRATION_PERIOD) revert InvalidExpirationPeriod();
-
-        uint256 oldPeriod = depositExpirationPeriod;
-        depositExpirationPeriod = newExpirationPeriod;
-
-        emit DepositExpirationPeriodUpdated(oldPeriod, newExpirationPeriod);
-    }
-
-    /*//////////////////////////////////////////////////////////////
                     ERC4626 OVERRIDE DEPOSIT FUNCTION
     //////////////////////////////////////////////////////////////*/
 
     /**
      * @notice Override deposit to send assets to issuer wallet and track pending deposits
      * @dev Creates a pending deposit record that issuer must accept to mint shares
+     * @dev Shares eventually minted might not match the shares at time of pending deposit
      * @param by Address of the sender
      * @param to Address that will receive shares when issuer accepts
      * @param assets Amount of assets to deposit
-     * @param shares Amount of shares that would be minted (used for event)
      */
-    function _deposit(address by, address to, uint256 assets, uint256 shares) internal virtual override nonReentrant {
-        // Run deposit hooks
+    function _deposit(address by, address to, uint256 assets, uint256) internal virtual override nonReentrant {
         HookInfo[] storage opHooks = operationHooks[OP_DEPOSIT];
         for (uint256 i = 0; i < opHooks.length;) {
             IHook.HookOutput memory hookOutput = opHooks[i].hook.onBeforeDeposit(address(this), by, assets, to);
             if (!hookOutput.approved) {
                 revert HookCheckFailed(hookOutput.reason);
             }
-            opHooks[i].hasProcessedOperations = true;
+
             unchecked {
                 ++i;
             }
+        }
+
+        // Update last executed block for this operation type if hooks were called
+        if (opHooks.length > 0) {
+            lastExecutedBlock[OP_DEPOSIT] = block.number;
         }
 
         // Get issuer wallet from strategy
@@ -148,7 +132,6 @@ contract DirectDepositRWA is tRWA {
             depositor: by,
             recipient: to,
             assetAmount: assets,
-            expirationTime: block.timestamp + depositExpirationPeriod,
             state: DepositState.PENDING
         });
 
@@ -161,11 +144,9 @@ contract DirectDepositRWA is tRWA {
         userPendingAssets[by] += assets;
 
         // Transfer assets directly to issuer wallet
-        SafeTransferLib.safeTransferFrom(asset(), by, issuerWallet, assets);
+        Conduit(IRegistry(RoleManaged(strategy).registry()).conduit()).collectDeposit(asset(), by, issuerWallet, assets);
 
-        emit DirectDeposit(by, issuerWallet, assets);
-        emit DepositPending(depositId, by, to, assets);
-        emit Deposit(by, to, assets, shares);
+        emit DirectDepositPending(depositId, by, to, assets);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -176,7 +157,7 @@ contract DirectDepositRWA is tRWA {
      * @notice Accept a pending deposit and mint shares
      * @param depositId The deposit ID to accept
      */
-    function acceptDeposit(bytes32 depositId) external onlyStrategy {
+    function mintSharesForDeposit(bytes32 depositId) external onlyStrategy {
         PendingDeposit storage deposit = pendingDeposits[depositId];
         if (deposit.depositor == address(0)) revert DepositNotFound();
         if (deposit.state != DepositState.PENDING) revert DepositNotPending();
@@ -201,7 +182,7 @@ contract DirectDepositRWA is tRWA {
      * @notice Accept multiple pending deposits as a batch
      * @param ids Array of deposit IDs to accept
      */
-    function batchAcceptDeposits(bytes32[] calldata ids) external onlyStrategy {
+    function batchMintSharesForDeposit(bytes32[] calldata ids) external onlyStrategy {
         if (ids.length == 0) return;
 
         uint256 totalAssets = 0;
@@ -260,82 +241,7 @@ contract DirectDepositRWA is tRWA {
         totalPendingAssets -= deposit.assetAmount;
         userPendingAssets[deposit.depositor] -= deposit.assetAmount;
 
-        // Transfer assets from this contract to depositor
-        // Note: Strategy must ensure funds are available before calling
-        SafeTransferLib.safeTransfer(asset(), deposit.depositor, deposit.assetAmount);
-
         emit DepositRefunded(depositId, deposit.depositor, deposit.assetAmount);
-    }
-
-    /**
-     * @notice Allow a user to reclaim their expired deposit
-     * @dev User can only reclaim if deposit has expired
-     * @param depositId The deposit ID to reclaim
-     */
-    function reclaimDeposit(bytes32 depositId) external {
-        PendingDeposit storage deposit = pendingDeposits[depositId];
-        if (deposit.depositor == address(0)) revert DepositNotFound();
-        if (deposit.state != DepositState.PENDING) revert DepositNotPending();
-        if (msg.sender != deposit.depositor) revert Unauthorized();
-        if (block.timestamp < deposit.expirationTime) revert Unauthorized();
-
-        // Mark as refunded
-        deposit.state = DepositState.REFUNDED;
-
-        // Update accounting
-        totalPendingAssets -= deposit.assetAmount;
-        userPendingAssets[deposit.depositor] -= deposit.assetAmount;
-
-        // Transfer assets from strategy (it must have funds available)
-        SafeTransferLib.safeTransferFrom(asset(), strategy, deposit.depositor, deposit.assetAmount);
-
-        emit DepositReclaimed(depositId, deposit.depositor, deposit.assetAmount);
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                        LEGACY MINTING FUNCTIONS
-    //////////////////////////////////////////////////////////////*/
-
-    /**
-     * @notice Legacy function for direct minting (kept for compatibility)
-     * @dev Can only be called by the issuer through the strategy
-     * @param recipient Address to receive the shares
-     * @param shares Amount of shares to mint
-     */
-    function mintShares(address recipient, uint256 shares) external onlyStrategy {
-        if (recipient == address(0)) revert InvalidRecipient();
-        if (shares == 0) revert InvalidAmount();
-
-        _mint(recipient, shares);
-    }
-
-    /**
-     * @notice Legacy batch mint function (kept for compatibility)
-     * @dev Can only be called by the issuer through the strategy
-     * @param recipients Array of recipient addresses
-     * @param shares Array of share amounts aligned with recipients
-     */
-    function batchMintShares(address[] calldata recipients, uint256[] calldata shares) external onlyStrategy {
-        // Validate array lengths match
-        if (recipients.length != shares.length) {
-            revert InvalidArrayLengths();
-        }
-
-        // Track total shares minted for event
-        uint256 totalShares = 0;
-
-        // Mint shares to each recipient
-        for (uint256 i = 0; i < recipients.length;) {
-            if (recipients[i] == address(0)) revert InvalidRecipient();
-            if (shares[i] == 0) revert InvalidAmount();
-
-            _mint(recipients[i], shares[i]);
-            totalShares += shares[i];
-
-            unchecked {
-                ++i;
-            }
-        }
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -385,15 +291,14 @@ contract DirectDepositRWA is tRWA {
      * @return depositor The address that initiated the deposit
      * @return recipient The address that will receive shares if approved
      * @return assetAmount The amount of assets deposited
-     * @return expirationTime The timestamp after which deposit can be reclaimed
      * @return state The current state of the deposit (0=PENDING, 1=ACCEPTED, 2=REFUNDED)
      */
     function getDepositDetails(bytes32 depositId)
         external
         view
-        returns (address depositor, address recipient, uint256 assetAmount, uint256 expirationTime, uint8 state)
+        returns (address depositor, address recipient, uint256 assetAmount, uint8 state)
     {
         PendingDeposit memory deposit = pendingDeposits[depositId];
-        return (deposit.depositor, deposit.recipient, deposit.assetAmount, deposit.expirationTime, uint8(deposit.state));
+        return (deposit.depositor, deposit.recipient, deposit.assetAmount, uint8(deposit.state));
     }
 }
