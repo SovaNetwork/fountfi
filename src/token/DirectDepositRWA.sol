@@ -95,8 +95,9 @@ contract DirectDepositRWA is tRWA {
                     ERC4626 OVERRIDE DEPOSIT FUNCTION
     //////////////////////////////////////////////////////////////*/
 
+
     /**
-     * @notice Override deposit to send assets to issuer wallet and track pending deposits
+     * @notice Override _deposit to send assets to issuer wallet and track pending deposits
      * @dev Creates a pending deposit record that issuer must accept to mint shares
      * @dev Shares eventually minted might not match the shares at time of pending deposit
      * @param by Address of the sender
