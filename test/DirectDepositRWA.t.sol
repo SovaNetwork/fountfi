@@ -471,6 +471,102 @@ contract DirectDepositRWATest is BaseFountfiTest {
         assertTrue(userDeposits[0] != userDeposits[1], "Deposit IDs should be unique");
     }
     
+    function test_MintSharesForDepositDirect() public {
+        uint256 depositAmount = INITIAL_DEPOSIT;
+        
+        // Alice deposits
+        vm.prank(alice);
+        token.deposit(depositAmount, alice);
+        
+        // Get deposit ID
+        bytes32[] memory userDeposits = token.getUserPendingDeposits(alice);
+        bytes32 depositId = userDeposits[0];
+        
+        // Strategy directly mints shares (not through batch)
+        vm.prank(address(strategy));
+        token.mintSharesForDeposit(depositId);
+        
+        // Check shares minted
+        uint256 expectedShares = depositAmount * 10**12; // Convert from 6 to 18 decimals
+        assertEq(token.balanceOf(alice), expectedShares, "Alice should receive shares");
+        
+        // Check pending deposits cleared
+        assertEq(token.totalPendingAssets(), 0, "Total pending assets should be zero");
+        assertEq(token.userPendingAssets(alice), 0, "User pending assets should be zero");
+        
+        // Check deposit state
+        (, , , uint8 state) = token.getDepositDetails(depositId);
+        assertEq(state, 1, "State should be ACCEPTED (1)");
+    }
+
+    function test_DepositWithNoHooks() public {
+        // This test ensures the branch where opHooks.length == 0 is covered
+        uint256 depositAmount = INITIAL_DEPOSIT;
+        uint256 issuerBalanceBefore = usdc.balanceOf(issuerWallet);
+        
+        // Deposit without any hooks configured
+        vm.prank(alice);
+        uint256 shares = token.deposit(depositAmount, alice);
+        
+        // Should return preview of shares but not mint them immediately
+        uint256 expectedShares = depositAmount * 10**12; // Convert from 6 to 18 decimals
+        assertEq(shares, expectedShares, "Should return preview of shares");
+        assertEq(token.balanceOf(alice), 0, "Alice should have no shares yet");
+        
+        // Check that funds went to issuer wallet
+        assertEq(usdc.balanceOf(issuerWallet), issuerBalanceBefore + depositAmount, "Issuer should receive funds");
+    }
+
+    function test_GetUserPendingDepositsEmpty() public {
+        // Test getUserPendingDeposits when user has no deposits
+        bytes32[] memory deposits = token.getUserPendingDeposits(alice);
+        assertEq(deposits.length, 0, "Should have no deposits");
+    }
+
+    function test_GetUserPendingDepositsAllAccepted() public {
+        // Alice makes a deposit
+        vm.prank(alice);
+        token.deposit(INITIAL_DEPOSIT, alice);
+        
+        // Get deposit ID and accept it
+        bytes32[] memory pendingDeposits = token.getUserPendingDeposits(alice);
+        assertEq(pendingDeposits.length, 1, "Should have 1 pending deposit");
+        
+        // Accept the deposit
+        vm.prank(address(strategy));
+        token.mintSharesForDeposit(pendingDeposits[0]);
+        
+        // Now getUserPendingDeposits should return empty array
+        bytes32[] memory afterAcceptance = token.getUserPendingDeposits(alice);
+        assertEq(afterAcceptance.length, 0, "Should have no pending deposits after acceptance");
+    }
+
+    function test_GetUserPendingDepositsMixed() public {
+        // Alice makes multiple deposits
+        vm.startPrank(alice);
+        token.deposit(INITIAL_DEPOSIT, alice);
+        token.deposit(SMALL_DEPOSIT, alice);
+        token.deposit(INITIAL_DEPOSIT * 2, alice);
+        vm.stopPrank();
+        
+        // Get all deposit IDs
+        bytes32[] memory allDeposits = token.getUserPendingDeposits(alice);
+        assertEq(allDeposits.length, 3, "Should have 3 pending deposits");
+        
+        // Accept first deposit
+        vm.prank(address(strategy));
+        token.mintSharesForDeposit(allDeposits[0]);
+        
+        // Refund second deposit
+        vm.prank(address(strategy));
+        token.refundDeposit(allDeposits[1]);
+        
+        // Check pending deposits - should only have the third one
+        bytes32[] memory remainingDeposits = token.getUserPendingDeposits(alice);
+        assertEq(remainingDeposits.length, 1, "Should have 1 pending deposit");
+        assertEq(remainingDeposits[0], allDeposits[2], "Should be the third deposit");
+    }
+
     function test_GetDepositDetailsForNonexistent() public {
         bytes32 fakeDepositId = keccak256("nonexistent");
         
@@ -479,5 +575,41 @@ contract DirectDepositRWATest is BaseFountfiTest {
         assertEq(recipient, address(0), "Recipient should be zero");
         assertEq(assetAmount, 0, "Asset amount should be zero");
         assertEq(state, 0, "State should be zero");
+    }
+
+    function test_MintSharesForNonexistentDeposit() public {
+        bytes32 fakeDepositId = keccak256("nonexistent");
+        
+        // Try to mint shares for non-existent deposit
+        vm.prank(address(strategy));
+        vm.expectRevert(DirectDepositRWA.DepositNotFound.selector);
+        token.mintSharesForDeposit(fakeDepositId);
+    }
+
+    function test_RefundNonexistentDeposit() public {
+        bytes32 fakeDepositId = keccak256("nonexistent");
+        
+        // Try to refund non-existent deposit
+        vm.prank(address(strategy));
+        vm.expectRevert(DirectDepositRWA.DepositNotFound.selector);
+        token.refundDeposit(fakeDepositId);
+    }
+
+    function test_RefundAlreadyRefundedDeposit() public {
+        // Alice deposits
+        vm.prank(alice);
+        token.deposit(INITIAL_DEPOSIT, alice);
+        
+        bytes32[] memory userDeposits = token.getUserPendingDeposits(alice);
+        bytes32 depositId = userDeposits[0];
+        
+        // First refund succeeds
+        vm.prank(address(strategy));
+        token.refundDeposit(depositId);
+        
+        // Second refund should fail with DepositNotPending
+        vm.prank(address(strategy));
+        vm.expectRevert(DirectDepositRWA.DepositNotPending.selector);
+        token.refundDeposit(depositId);
     }
 }
