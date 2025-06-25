@@ -17,6 +17,23 @@ import {SafeTransferLib} from "solady/utils/SafeTransferLib.sol";
 import {IHook} from "../src/hooks/IHook.sol";
 import {RoleManager} from "../src/auth/RoleManager.sol";
 import {Registry} from "../src/registry/Registry.sol";
+import {ERC4626} from "solady/tokens/ERC4626.sol";
+
+/**
+ * @title HookHelper
+ * @notice Helper contract to add hooks to DirectManagedRWA since only strategy can add hooks
+ */
+contract HookHelper {
+    DirectManagedRWA public token;
+    
+    constructor(DirectManagedRWA _token) {
+        token = _token;
+    }
+    
+    function addHook(bytes32 operation, address hook) external {
+        token.addOperationHook(operation, hook);
+    }
+}
 
 contract DirectManagedRWATest is BaseFountfiTest {
     using SafeTransferLib for address;
@@ -31,6 +48,10 @@ contract DirectManagedRWATest is BaseFountfiTest {
     uint256 public constant INITIAL_PRICE = 1e18;
     uint256 public constant DEPOSIT_AMOUNT = 1000e6;
     uint8 public constant USDC_DECIMALS = 6;
+    
+    // Hook operation types
+    bytes32 public constant OP_DEPOSIT = keccak256("DEPOSIT_OPERATION");
+    bytes32 public constant OP_WITHDRAW = keccak256("WITHDRAW_OPERATION");
     
     // Events
     event DirectDepositPending(
@@ -167,16 +188,35 @@ contract DirectManagedRWATest is BaseFountfiTest {
     }
 
     function test_Deposit_WithHooks() public {
-        // This test is expected to fail because hooks can only be added by the strategy itself
-        // In a real scenario, the strategy would need to expose a function to manage hooks
-        // For now, we'll skip testing hooks directly on the token
-        vm.skip(true);
+        // Create a passing hook
+        MockHook passingHook = new MockHook(true, "");
+        
+        // Add hook through strategy
+        vm.prank(address(strategy));
+        directManagedRWA.addOperationHook(OP_DEPOSIT, address(passingHook));
+        
+        // Deposit should work with approving hook
+        vm.prank(alice);
+        directManagedRWA.deposit(DEPOSIT_AMOUNT, alice);
+        
+        // Verify hook was called by checking lastExecutedBlock
+        assertEq(directManagedRWA.lastExecutedBlock(OP_DEPOSIT), block.number);
     }
 
     function test_Deposit_RevertWhenHookFails() public {
-        // This test is expected to fail because hooks can only be added by the strategy itself
-        // In a real scenario, the strategy would need to expose a function to manage hooks
-        vm.skip(true);
+        // Create rejecting hook
+        AlwaysRejectingHook rejectHook = new AlwaysRejectingHook("Deposit rejected by hook");
+        
+        // Add hook through strategy
+        vm.prank(address(strategy));
+        directManagedRWA.addOperationHook(OP_DEPOSIT, address(rejectHook));
+        
+        // Deposit should fail
+        vm.prank(alice);
+        vm.expectRevert(
+            abi.encodeWithSelector(tRWA.HookCheckFailed.selector, "Deposit rejected by hook")
+        );
+        directManagedRWA.deposit(DEPOSIT_AMOUNT, alice);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -476,11 +516,12 @@ contract DirectManagedRWATest is BaseFountfiTest {
         
         uint256 shares = directManagedRWA.balanceOf(alice);
         
-        // Don't approve strategy - maxRedeem will be 0
+        // Try to redeem more shares than alice has
+        uint256 excessShares = shares + 1;
         
-        vm.expectRevert();
+        vm.expectRevert(ERC4626.RedeemMoreThanMax.selector);
         vm.prank(address(strategy));
-        directManagedRWA.redeem(shares, alice, alice, 0);
+        directManagedRWA.redeem(excessShares, alice, alice, 0);
     }
 
     function test_BatchRedeemShares_Success() public {
@@ -607,15 +648,110 @@ contract DirectManagedRWATest is BaseFountfiTest {
     }
 
     function test_BatchRedeemShares_WithHooks() public {
-        // This test is expected to fail because hooks can only be added by the strategy itself
-        // In a real scenario, the strategy would need to expose a function to manage hooks
-        vm.skip(true);
+        // Setup shares
+        vm.prank(alice);
+        directManagedRWA.deposit(DEPOSIT_AMOUNT, alice);
+        vm.prank(bob);
+        directManagedRWA.deposit(DEPOSIT_AMOUNT * 2, bob);
+        
+        bytes32[] memory depositIds = new bytes32[](2);
+        depositIds[0] = directManagedRWA.getUserPendingDeposits(alice)[0];
+        depositIds[1] = directManagedRWA.getUserPendingDeposits(bob)[0];
+        
+        vm.prank(address(strategy));
+        directManagedRWA.batchMintSharesForDeposit(depositIds);
+        
+        // Add a passing hook for withdrawals
+        MockHook passingHook = new MockHook(true, "");
+        vm.prank(address(strategy));
+        directManagedRWA.addOperationHook(OP_WITHDRAW, address(passingHook));
+        
+        // Prepare batch redemption
+        uint256[] memory shares = new uint256[](2);
+        shares[0] = directManagedRWA.balanceOf(alice);
+        shares[1] = directManagedRWA.balanceOf(bob);
+        
+        address[] memory recipients = new address[](2);
+        recipients[0] = alice;
+        recipients[1] = bob;
+        
+        address[] memory owners = new address[](2);
+        owners[0] = alice;
+        owners[1] = bob;
+        
+        uint256[] memory minAssets = new uint256[](2);
+        minAssets[0] = directManagedRWA.previewRedeem(shares[0]);
+        minAssets[1] = directManagedRWA.previewRedeem(shares[1]);
+        
+        // Approve
+        vm.prank(alice);
+        directManagedRWA.approve(address(strategy), shares[0]);
+        vm.prank(bob);
+        directManagedRWA.approve(address(strategy), shares[1]);
+        
+        // Transfer assets to strategy
+        uint256 totalAssets = minAssets[0] + minAssets[1];
+        if (usdc.balanceOf(issuerWallet) < totalAssets) {
+            usdc.mint(issuerWallet, totalAssets - usdc.balanceOf(issuerWallet));
+        }
+        vm.prank(issuerWallet);
+        usdc.transfer(address(strategy), totalAssets);
+        vm.prank(address(strategy));
+        usdc.approve(address(directManagedRWA), totalAssets);
+        
+        // Execute batch with hooks
+        vm.prank(address(strategy));
+        directManagedRWA.batchRedeemShares(shares, recipients, owners, minAssets);
+        
+        // Verify hook was called by checking lastExecutedBlock
+        assertEq(directManagedRWA.lastExecutedBlock(OP_WITHDRAW), block.number);
     }
 
     function test_BatchRedeemShares_RevertWhenHookFails() public {
-        // This test is expected to fail because hooks can only be added by the strategy itself
-        // In a real scenario, the strategy would need to expose a function to manage hooks
-        vm.skip(true);
+        // Setup shares
+        vm.prank(alice);
+        directManagedRWA.deposit(DEPOSIT_AMOUNT, alice);
+        
+        bytes32 depositId = directManagedRWA.getUserPendingDeposits(alice)[0];
+        vm.prank(address(strategy));
+        directManagedRWA.mintSharesForDeposit(depositId);
+        
+        // Add rejecting hook for withdrawals
+        MockHook rejectingHook = new MockHook(false, "Withdrawal rejected by hook");
+        vm.prank(address(strategy));
+        directManagedRWA.addOperationHook(OP_WITHDRAW, address(rejectingHook));
+        
+        // Prepare batch
+        uint256[] memory shares = new uint256[](1);
+        shares[0] = directManagedRWA.balanceOf(alice);
+        
+        address[] memory recipients = new address[](1);
+        recipients[0] = alice;
+        
+        address[] memory owners = new address[](1);
+        owners[0] = alice;
+        
+        uint256[] memory minAssets = new uint256[](1);
+        minAssets[0] = directManagedRWA.previewRedeem(shares[0]);
+        
+        vm.prank(alice);
+        directManagedRWA.approve(address(strategy), shares[0]);
+        
+        // Transfer assets to strategy
+        if (usdc.balanceOf(issuerWallet) < minAssets[0]) {
+            usdc.mint(issuerWallet, minAssets[0] - usdc.balanceOf(issuerWallet));
+        }
+        vm.prank(issuerWallet);
+        usdc.transfer(address(strategy), minAssets[0]);
+        vm.prank(address(strategy));
+        usdc.approve(address(directManagedRWA), minAssets[0]);
+        
+        // Should revert due to hook rejection
+        vm.expectRevert(
+            abi.encodeWithSelector(tRWA.HookCheckFailed.selector, "Withdrawal rejected by hook")
+        );
+        vm.prank(address(strategy));
+        directManagedRWA.batchRedeemShares(shares, recipients, owners, minAssets);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -762,5 +898,455 @@ contract DirectManagedRWATest is BaseFountfiTest {
         bytes32[] memory deposits = directManagedRWA.getUserPendingDeposits(alice);
         assertEq(deposits.length, 2);
         assertTrue(deposits[0] != deposits[1]); // Different IDs despite same parameters
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                    ADDITIONAL BRANCH COVERAGE TESTS
+    //////////////////////////////////////////////////////////////*/
+
+    function test_BatchRedeemShares_RevertExceedsMaxInBatch() public {
+        // Setup shares for alice and bob
+        vm.prank(alice);
+        directManagedRWA.deposit(DEPOSIT_AMOUNT, alice);
+        vm.prank(bob);
+        directManagedRWA.deposit(DEPOSIT_AMOUNT, bob);
+        
+        bytes32[] memory depositIds = new bytes32[](2);
+        depositIds[0] = directManagedRWA.getUserPendingDeposits(alice)[0];
+        depositIds[1] = directManagedRWA.getUserPendingDeposits(bob)[0];
+        
+        vm.prank(address(strategy));
+        directManagedRWA.batchMintSharesForDeposit(depositIds);
+        
+        uint256 aliceShares = directManagedRWA.balanceOf(alice);
+        uint256 bobShares = directManagedRWA.balanceOf(bob);
+        
+        // Try to redeem more shares than Bob has
+        uint256[] memory shares = new uint256[](2);
+        shares[0] = aliceShares;
+        shares[1] = bobShares + 1; // This exceeds Bob's balance
+        
+        address[] memory recipients = new address[](2);
+        recipients[0] = alice;
+        recipients[1] = bob;
+        
+        address[] memory owners = new address[](2);
+        owners[0] = alice;
+        owners[1] = bob;
+        
+        uint256[] memory minAssets = new uint256[](2);
+        minAssets[0] = 0;
+        minAssets[1] = 0;
+        
+        vm.expectRevert(ERC4626.RedeemMoreThanMax.selector);
+        vm.prank(address(strategy));
+        directManagedRWA.batchRedeemShares(shares, recipients, owners, minAssets);
+    }
+
+    function test_Redeem_StandardVersion_RevertExceedsMax() public {
+        // Setup shares
+        vm.prank(alice);
+        directManagedRWA.deposit(DEPOSIT_AMOUNT, alice);
+        
+        bytes32 depositId = directManagedRWA.getUserPendingDeposits(alice)[0];
+        vm.prank(address(strategy));
+        directManagedRWA.mintSharesForDeposit(depositId);
+        
+        uint256 shares = directManagedRWA.balanceOf(alice);
+        
+        // Try to redeem more shares than alice has
+        uint256 excessShares = shares + 1;
+        
+        vm.expectRevert(ERC4626.RedeemMoreThanMax.selector);
+        vm.prank(address(strategy));
+        directManagedRWA.redeem(excessShares, alice, alice);
+    }
+
+    function test_BatchRedeemShares_WithEmptyHooks() public {
+        // This tests the branch where opHooks.length == 0
+        // Setup shares
+        vm.prank(alice);
+        directManagedRWA.deposit(DEPOSIT_AMOUNT, alice);
+        
+        bytes32 depositId = directManagedRWA.getUserPendingDeposits(alice)[0];
+        vm.prank(address(strategy));
+        directManagedRWA.mintSharesForDeposit(depositId);
+        
+        uint256[] memory shares = new uint256[](1);
+        shares[0] = directManagedRWA.balanceOf(alice);
+        
+        address[] memory recipients = new address[](1);
+        recipients[0] = alice;
+        
+        address[] memory owners = new address[](1);
+        owners[0] = alice;
+        
+        uint256[] memory minAssets = new uint256[](1);
+        minAssets[0] = directManagedRWA.previewRedeem(shares[0]);
+        
+        vm.prank(alice);
+        directManagedRWA.approve(address(strategy), shares[0]);
+        
+        // Ensure issuer wallet has enough balance
+        if (usdc.balanceOf(issuerWallet) < minAssets[0]) {
+            usdc.mint(issuerWallet, minAssets[0] - usdc.balanceOf(issuerWallet));
+        }
+        
+        vm.prank(issuerWallet);
+        usdc.transfer(address(strategy), minAssets[0]);
+        
+        vm.prank(address(strategy));
+        usdc.approve(address(directManagedRWA), minAssets[0]);
+        
+        // Execute batch redemption without any hooks
+        vm.prank(address(strategy));
+        uint256[] memory assets = directManagedRWA.batchRedeemShares(shares, recipients, owners, minAssets);
+        
+        assertEq(assets[0], minAssets[0]);
+        assertEq(directManagedRWA.balanceOf(alice), 0);
+    }
+
+    function test_BatchRedeemShares_MultipleUsersWithDifferentApprovals() public {
+        // This tests mixed approval scenarios in batch operations
+        vm.prank(alice);
+        directManagedRWA.deposit(DEPOSIT_AMOUNT, alice);
+        vm.prank(bob);
+        directManagedRWA.deposit(DEPOSIT_AMOUNT * 2, bob);
+        vm.prank(alice);
+        directManagedRWA.deposit(DEPOSIT_AMOUNT, alice);
+        
+        bytes32[] memory depositIds = new bytes32[](3);
+        depositIds[0] = directManagedRWA.getUserPendingDeposits(alice)[0];
+        depositIds[1] = directManagedRWA.getUserPendingDeposits(bob)[0];
+        depositIds[2] = directManagedRWA.getUserPendingDeposits(alice)[1];
+        
+        vm.prank(address(strategy));
+        directManagedRWA.batchMintSharesForDeposit(depositIds);
+        
+        // Alice approves half her balance, Bob approves all
+        uint256 aliceTotal = directManagedRWA.balanceOf(alice);
+        uint256 bobTotal = directManagedRWA.balanceOf(bob);
+        
+        vm.prank(alice);
+        directManagedRWA.approve(address(strategy), aliceTotal / 2);
+        vm.prank(bob);
+        directManagedRWA.approve(address(strategy), bobTotal);
+        
+        // Try to redeem: alice half (within approval), bob all, alice remaining (exceeds approval)
+        uint256[] memory shares = new uint256[](3);
+        shares[0] = aliceTotal / 2; // OK
+        shares[1] = bobTotal; // OK
+        shares[2] = aliceTotal / 2 + 1; // Exceeds approval
+        
+        address[] memory recipients = new address[](3);
+        recipients[0] = alice;
+        recipients[1] = bob;
+        recipients[2] = alice;
+        
+        address[] memory owners = new address[](3);
+        owners[0] = alice;
+        owners[1] = bob;
+        owners[2] = alice;
+        
+        uint256[] memory minAssets = new uint256[](3);
+        minAssets[0] = 0;
+        minAssets[1] = 0;
+        minAssets[2] = 0;
+        
+        // Should revert because third redemption exceeds alice's approval
+        vm.expectRevert();
+        vm.prank(address(strategy));
+        directManagedRWA.batchRedeemShares(shares, recipients, owners, minAssets);
+    }
+
+    function test_Mint_CreatesValidDeposit() public {
+        // Mint should create a deposit just like deposit() does
+        uint256 shares = 1000e18; // 1000 shares
+        uint256 assets = directManagedRWA.previewMint(shares);
+        
+        // Approve the required assets
+        usdc.mint(alice, assets);
+        vm.prank(alice);
+        usdc.approve(address(directManagedRWA), assets);
+        
+        vm.prank(alice);
+        directManagedRWA.mint(shares, alice);
+        
+        // Should have created a pending deposit
+        bytes32[] memory deposits = directManagedRWA.getUserPendingDeposits(alice);
+        assertEq(deposits.length, 1);
+        assertEq(directManagedRWA.totalPendingAssets(), assets);
+    }
+
+    function test_BatchRedeemShares_SingleItemBatch() public {
+        // Test edge case of single item batch to ensure loop logic is correct
+        vm.prank(alice);
+        directManagedRWA.deposit(DEPOSIT_AMOUNT, alice);
+        
+        bytes32 depositId = directManagedRWA.getUserPendingDeposits(alice)[0];
+        vm.prank(address(strategy));
+        directManagedRWA.mintSharesForDeposit(depositId);
+        
+        uint256 shares = directManagedRWA.balanceOf(alice);
+        
+        uint256[] memory sharesArray = new uint256[](1);
+        sharesArray[0] = shares;
+        
+        address[] memory recipients = new address[](1);
+        recipients[0] = alice;
+        
+        address[] memory owners = new address[](1);
+        owners[0] = alice;
+        
+        uint256[] memory minAssets = new uint256[](1);
+        minAssets[0] = directManagedRWA.previewRedeem(shares);
+        
+        vm.prank(alice);
+        directManagedRWA.approve(address(strategy), shares);
+        
+        // Ensure issuer wallet has enough balance
+        if (usdc.balanceOf(issuerWallet) < minAssets[0]) {
+            usdc.mint(issuerWallet, minAssets[0] - usdc.balanceOf(issuerWallet));
+        }
+        
+        vm.prank(issuerWallet);
+        usdc.transfer(address(strategy), minAssets[0]);
+        
+        vm.prank(address(strategy));
+        usdc.approve(address(directManagedRWA), minAssets[0]);
+        
+        vm.prank(address(strategy));
+        uint256[] memory assets = directManagedRWA.batchRedeemShares(sharesArray, recipients, owners, minAssets);
+        
+        assertEq(assets.length, 1);
+        assertEq(assets[0], minAssets[0]);
+        assertEq(directManagedRWA.balanceOf(alice), 0);
+    }
+
+    function test_Redeem_WithMinAssets_EdgeCaseExactAmount() public {
+        // Test edge case where assets == minAssets (boundary condition)
+        vm.prank(alice);
+        directManagedRWA.deposit(DEPOSIT_AMOUNT, alice);
+        
+        bytes32 depositId = directManagedRWA.getUserPendingDeposits(alice)[0];
+        vm.prank(address(strategy));
+        directManagedRWA.mintSharesForDeposit(depositId);
+        
+        uint256 shares = directManagedRWA.balanceOf(alice);
+        uint256 expectedAssets = directManagedRWA.previewRedeem(shares);
+        
+        vm.prank(alice);
+        directManagedRWA.approve(address(strategy), shares);
+        
+        // Ensure issuer wallet has enough balance
+        if (usdc.balanceOf(issuerWallet) < expectedAssets) {
+            usdc.mint(issuerWallet, expectedAssets - usdc.balanceOf(issuerWallet));
+        }
+        
+        vm.prank(issuerWallet);
+        usdc.transfer(address(strategy), expectedAssets);
+        
+        vm.prank(address(strategy));
+        usdc.approve(address(directManagedRWA), expectedAssets);
+        
+        // Use exact expected assets as minAssets (boundary test)
+        vm.prank(address(strategy));
+        uint256 assets = directManagedRWA.redeem(shares, alice, alice, expectedAssets);
+        
+        assertEq(assets, expectedAssets);
+        assertEq(directManagedRWA.balanceOf(alice), 0);
+    }
+
+    function test_BatchRedeemShares_ZeroShares() public {
+        // Test edge case with zero shares
+        vm.prank(alice);
+        directManagedRWA.deposit(DEPOSIT_AMOUNT, alice);
+        
+        bytes32 depositId = directManagedRWA.getUserPendingDeposits(alice)[0];
+        vm.prank(address(strategy));
+        directManagedRWA.mintSharesForDeposit(depositId);
+        
+        uint256[] memory shares = new uint256[](2);
+        shares[0] = 0; // Zero shares
+        shares[1] = directManagedRWA.balanceOf(alice);
+        
+        address[] memory recipients = new address[](2);
+        recipients[0] = alice;
+        recipients[1] = alice;
+        
+        address[] memory owners = new address[](2);
+        owners[0] = alice;
+        owners[1] = alice;
+        
+        uint256[] memory minAssets = new uint256[](2);
+        minAssets[0] = 0;
+        minAssets[1] = directManagedRWA.previewRedeem(shares[1]);
+        
+        vm.prank(alice);
+        directManagedRWA.approve(address(strategy), type(uint256).max);
+        
+        // Ensure issuer wallet has enough balance
+        if (usdc.balanceOf(issuerWallet) < minAssets[1]) {
+            usdc.mint(issuerWallet, minAssets[1] - usdc.balanceOf(issuerWallet));
+        }
+        
+        vm.prank(issuerWallet);
+        usdc.transfer(address(strategy), minAssets[1]);
+        
+        vm.prank(address(strategy));
+        usdc.approve(address(directManagedRWA), minAssets[1]);
+        
+        vm.prank(address(strategy));
+        uint256[] memory assets = directManagedRWA.batchRedeemShares(shares, recipients, owners, minAssets);
+        
+        assertEq(assets[0], 0);
+        assertEq(assets[1], minAssets[1]);
+    }
+
+    function test_Redeem_WithMinAssets_ZeroShares() public {
+        // Test redeem with zero shares - this covers the branch where shares <= maxRedeem(owner)
+        vm.prank(address(strategy));
+        uint256 assets = directManagedRWA.redeem(0, alice, alice, 0);
+        
+        assertEq(assets, 0);
+    }
+    
+    function test_Withdraw_DifferentParams() public {
+        // Test withdraw with different parameters to ensure full coverage
+        vm.expectRevert(DirectManagedRWA.UseRedeem.selector);
+        vm.prank(address(strategy));
+        directManagedRWA.withdraw(500, bob, charlie);
+    }
+    
+    function test_Redeem_WithHooks() public {
+        // Setup shares
+        vm.prank(alice);
+        directManagedRWA.deposit(DEPOSIT_AMOUNT, alice);
+        
+        bytes32 depositId = directManagedRWA.getUserPendingDeposits(alice)[0];
+        vm.prank(address(strategy));
+        directManagedRWA.mintSharesForDeposit(depositId);
+        
+        // Add a passing hook for withdrawals
+        MockHook passingHook = new MockHook(true, "");
+        vm.prank(address(strategy));
+        directManagedRWA.addOperationHook(OP_WITHDRAW, address(passingHook));
+        
+        uint256 shares = directManagedRWA.balanceOf(alice) / 2;
+        uint256 expectedAssets = directManagedRWA.previewRedeem(shares);
+        
+        vm.prank(alice);
+        directManagedRWA.approve(address(strategy), shares);
+        
+        // Transfer assets
+        if (usdc.balanceOf(issuerWallet) < expectedAssets) {
+            usdc.mint(issuerWallet, expectedAssets - usdc.balanceOf(issuerWallet));
+        }
+        vm.prank(issuerWallet);
+        usdc.transfer(address(strategy), expectedAssets);
+        vm.prank(address(strategy));
+        usdc.approve(address(directManagedRWA), expectedAssets);
+        
+        // Redeem with hook - standard version
+        vm.prank(address(strategy));
+        uint256 assets = directManagedRWA.redeem(shares, alice, alice);
+        
+        assertEq(assets, expectedAssets);
+        // Verify hook was called
+        assertEq(directManagedRWA.lastExecutedBlock(OP_WITHDRAW), block.number);
+    }
+    
+    function test_Redeem_WithMinAssets_ValidShares() public {
+        // This test covers the branch where shares <= maxRedeem(owner) in the minAssets version
+        vm.prank(alice);
+        directManagedRWA.deposit(DEPOSIT_AMOUNT, alice);
+        
+        bytes32 depositId = directManagedRWA.getUserPendingDeposits(alice)[0];
+        vm.prank(address(strategy));
+        directManagedRWA.mintSharesForDeposit(depositId);
+        
+        uint256 shares = directManagedRWA.balanceOf(alice) / 2; // Use only half
+        uint256 expectedAssets = directManagedRWA.previewRedeem(shares);
+        
+        // Alice approves strategy to spend her shares
+        vm.prank(alice);
+        directManagedRWA.approve(address(strategy), shares);
+        
+        // Transfer assets to strategy for withdrawal
+        if (usdc.balanceOf(issuerWallet) < expectedAssets) {
+            usdc.mint(issuerWallet, expectedAssets - usdc.balanceOf(issuerWallet));
+        }
+        vm.prank(issuerWallet);
+        usdc.transfer(address(strategy), expectedAssets);
+        
+        // Strategy needs to approve the token to pull assets
+        vm.prank(address(strategy));
+        usdc.approve(address(directManagedRWA), expectedAssets);
+        
+        // Redeem with valid shares (should pass the check)
+        vm.prank(address(strategy));
+        uint256 assets = directManagedRWA.redeem(shares, alice, alice, expectedAssets);
+        
+        assertEq(assets, expectedAssets);
+    }
+    
+    function test_BatchRedeemShares_ValidSharesWithHooks() public {
+        // This test covers both the shares[i] <= maxRedeem check and hook execution
+        vm.prank(alice);
+        directManagedRWA.deposit(DEPOSIT_AMOUNT * 2, alice);
+        
+        bytes32 depositId = directManagedRWA.getUserPendingDeposits(alice)[0];
+        vm.prank(address(strategy));
+        directManagedRWA.mintSharesForDeposit(depositId);
+        
+        // Add multiple hooks
+        MockHook hook1 = new MockHook(true, "");
+        MockHook hook2 = new MockHook(true, "");
+        vm.startPrank(address(strategy));
+        directManagedRWA.addOperationHook(OP_WITHDRAW, address(hook1));
+        directManagedRWA.addOperationHook(OP_WITHDRAW, address(hook2));
+        vm.stopPrank();
+        
+        // Prepare valid redemption (shares < balance)
+        uint256[] memory shares = new uint256[](1);
+        shares[0] = directManagedRWA.balanceOf(alice) / 3; // Use only 1/3
+        
+        address[] memory recipients = new address[](1);
+        recipients[0] = alice;
+        
+        address[] memory owners = new address[](1);
+        owners[0] = alice;
+        
+        uint256[] memory minAssets = new uint256[](1);
+        minAssets[0] = directManagedRWA.previewRedeem(shares[0]);
+        
+        // Approve exactly what's needed
+        vm.prank(alice);
+        directManagedRWA.approve(address(strategy), shares[0]);
+        
+        // Transfer assets
+        if (usdc.balanceOf(issuerWallet) < minAssets[0]) {
+            usdc.mint(issuerWallet, minAssets[0] - usdc.balanceOf(issuerWallet));
+        }
+        vm.prank(issuerWallet);
+        usdc.transfer(address(strategy), minAssets[0]);
+        vm.prank(address(strategy));
+        usdc.approve(address(directManagedRWA), minAssets[0]);
+        
+        // Execute - should pass all checks and execute hooks
+        vm.prank(address(strategy));
+        directManagedRWA.batchRedeemShares(shares, recipients, owners, minAssets);
+        
+        // Verify hooks were executed
+        assertEq(directManagedRWA.lastExecutedBlock(OP_WITHDRAW), block.number);
+    }
+
+    function test_Deposit_ZeroAmount() public {
+        // Test deposit with zero amount (should succeed with no effect)
+        vm.prank(alice);
+        directManagedRWA.deposit(0, alice);
+        
+        assertEq(directManagedRWA.getUserPendingDeposits(alice).length, 1);
+        assertEq(directManagedRWA.totalPendingAssets(), 0);
     }
 }
