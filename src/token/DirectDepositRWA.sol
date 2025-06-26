@@ -9,7 +9,6 @@ import {Conduit} from "../conduit/Conduit.sol";
 import {RoleManaged} from "../auth/RoleManaged.sol";
 import {IRegistry} from "../registry/IRegistry.sol";
 
-
 /**
  * @title DirectDepositRWA
  * @notice tRWA variant where deposits go directly to issuer wallet with pending deposit tracking
@@ -95,7 +94,6 @@ contract DirectDepositRWA is tRWA {
                     ERC4626 OVERRIDE DEPOSIT FUNCTION
     //////////////////////////////////////////////////////////////*/
 
-
     /**
      * @notice Override _deposit to send assets to issuer wallet and track pending deposits
      * @dev Creates a pending deposit record that issuer must accept to mint shares
@@ -129,12 +127,8 @@ contract DirectDepositRWA is tRWA {
         bytes32 depositId = keccak256(abi.encodePacked(by, to, assets, block.timestamp, address(this), sequenceNum++));
 
         // Record the deposit
-        pendingDeposits[depositId] = PendingDeposit({
-            depositor: by,
-            recipient: to,
-            assetAmount: assets,
-            state: DepositState.PENDING
-        });
+        pendingDeposits[depositId] =
+            PendingDeposit({depositor: by, recipient: to, assetAmount: assets, state: DepositState.PENDING});
 
         // Track deposit ID
         depositIds.push(depositId);

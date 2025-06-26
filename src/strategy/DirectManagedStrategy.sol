@@ -110,5 +110,4 @@ contract DirectManagedStrategy is ManagedWithdrawReportedStrategy, IDirectDeposi
     function batchMintShares(bytes32[] calldata ids) external override onlyManager {
         DirectManagedRWA(sToken).batchMintSharesForDeposit(ids);
     }
-
 }

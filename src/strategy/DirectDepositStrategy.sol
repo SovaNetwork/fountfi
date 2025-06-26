@@ -94,7 +94,6 @@ contract DirectDepositStrategy is ReportedStrategy, IDirectDepositStrategy {
         emit SetIssuerWallet(oldWallet, newWallet);
     }
 
-
     /*//////////////////////////////////////////////////////////////
                         SHARE MINTING FUNCTIONS
     //////////////////////////////////////////////////////////////*/
