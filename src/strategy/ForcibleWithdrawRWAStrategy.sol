@@ -10,7 +10,18 @@ import {ForcibleWithdrawRWA} from "../token/ForcibleWithdrawRWA.sol";
  * @dev Adds force redemption capabilities while maintaining all signature-based withdrawal functionality
  */
 contract ForcibleWithdrawRWAStrategy is ManagedWithdrawReportedStrategy {
-    // Override to deploy ForcibleWithdrawRWA instead of ManagedWithdrawRWA
+    /*//////////////////////////////////////////////////////////////
+                        INITIALIZATION
+    //////////////////////////////////////////////////////////////*/
+
+    /**
+     * @notice Deploy ForcibleWithdrawRWA token instead of ManagedWithdrawRWA
+     * @param name_ Token name
+     * @param symbol_ Token symbol
+     * @param asset_ Asset address
+     * @param assetDecimals_ Asset decimals
+     * @return Address of deployed token
+     */
     function _deployToken(string calldata name_, string calldata symbol_, address asset_, uint8 assetDecimals_)
         internal
         virtual
@@ -20,23 +31,39 @@ contract ForcibleWithdrawRWAStrategy is ManagedWithdrawReportedStrategy {
         return address(new ForcibleWithdrawRWA(name_, symbol_, asset_, assetDecimals_, address(this)));
     }
 
-    // Force redemption function - callable only by manager
+    /*//////////////////////////////////////////////////////////////
+                        REDEMPTION LOGIC
+    //////////////////////////////////////////////////////////////*/
+
+    /**
+     * @notice Force redeem shares from a user without signature
+     * @dev Only callable by manager
+     * @param shares Amount of shares to force redeem
+     * @param account Account to force redeem from
+     * @param receiver Receiver of the assets
+     * @return assets Amount of assets sent
+     */
     function forceRedeem(uint256 shares, address account, address receiver)
         external
         onlyManager
         returns (uint256 assets)
     {
-        // Call the token's forceRedeem function
         assets = ForcibleWithdrawRWA(address(sToken)).forceRedeem(shares, account, receiver);
     }
 
-    // Batch force redemption - callable only by manager
+    /**
+     * @notice Batch force redeem shares from multiple users
+     * @dev Only callable by manager
+     * @param shares Array of share amounts
+     * @param accounts Array of accounts to redeem from
+     * @param receivers Array of asset receivers
+     * @return assets Array of asset amounts sent
+     */
     function batchForceRedeem(uint256[] calldata shares, address[] calldata accounts, address[] calldata receivers)
         external
         onlyManager
         returns (uint256[] memory assets)
     {
-        // Call the token's batchForceRedeem function
         assets = ForcibleWithdrawRWA(address(sToken)).batchForceRedeem(shares, accounts, receivers);
     }
 }
