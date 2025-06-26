@@ -104,20 +104,16 @@ contract DepositCapHook is BaseHook {
      * @param assets Amount of assets to deposit
      * @return IHook.HookOutput Result of the hook evaluation
      */
-    function onBeforeDeposit(
-        address,
-        address,
-        uint256 assets,
-        address
-    ) public override returns (IHook.HookOutput memory) {
+    function onBeforeDeposit(address, address, uint256 assets, address)
+        public
+        override
+        returns (IHook.HookOutput memory)
+    {
         uint256 newTotal = totalDeposited + assets;
 
         // Check if deposit would exceed cap
         if (newTotal > depositCap) {
-            return IHook.HookOutput({
-                approved: false,
-                reason: "DepositCap: limit exceeded"
-            });
+            return IHook.HookOutput({approved: false, reason: "DepositCap: limit exceeded"});
         }
 
         // Update global tracking
@@ -133,13 +129,12 @@ contract DepositCapHook is BaseHook {
      * @dev Withdrawals do not reduce the deposit cap (non-decrementing)
      * @return IHook.HookOutput Result of the hook evaluation
      */
-    function onBeforeWithdraw(
-        address,
-        address,
-        uint256,
-        address,
-        address
-    ) public pure override returns (IHook.HookOutput memory) {
+    function onBeforeWithdraw(address, address, uint256, address, address)
+        public
+        pure
+        override
+        returns (IHook.HookOutput memory)
+    {
         // Always approve withdrawals - cap only applies to deposits
         return IHook.HookOutput({approved: true, reason: ""});
     }
