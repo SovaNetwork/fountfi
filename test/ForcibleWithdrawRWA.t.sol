@@ -144,7 +144,8 @@ contract ForcibleWithdrawRWATest is Test {
 
     function test_Constructor() public {
         // Deploy a fresh token to test constructor
-        ForcibleWithdrawRWA newToken = new ForcibleWithdrawRWA("Test Token", "TEST", address(asset), 6, address(strategy));
+        ForcibleWithdrawRWA newToken =
+            new ForcibleWithdrawRWA("Test Token", "TEST", address(asset), 6, address(strategy));
 
         assertEq(newToken.name(), "Test Token");
         assertEq(newToken.symbol(), "TEST");
@@ -301,7 +302,7 @@ contract ForcibleWithdrawRWATest is Test {
 
         // Verify hook was NOT called - forceRedeem bypasses hooks to ensure it cannot be blocked
         assertFalse(trackingHook.wasWithdrawCalled());
-        
+
         // Verify the redemption still succeeded
         assertEq(assets, 1000e6);
         assertEq(token.balanceOf(user1), 0);
@@ -538,7 +539,7 @@ contract ForcibleWithdrawRWATest is Test {
 
         // Verify hook was NOT called - batchForceRedeem also bypasses hooks
         assertFalse(trackingHook.wasWithdrawCalled());
-        
+
         // Verify the redemption still succeeded
         assertEq(assets[0], 1000e6);
         assertEq(token.balanceOf(user1), 0);
