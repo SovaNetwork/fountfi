@@ -15,6 +15,7 @@ import {Conduit} from "../src/conduit/Conduit.sol";
 contract DeployProtocolScript is Script {
     // Management addresses
     address public constant MANAGER_1 = 0x91C64d8D530c494B65A7ae58B8534Ac5A05A3d43;
+    address deployer;
 
     // Storage for deployed contract addresses
     RoleManager public roleManager;
@@ -28,14 +29,14 @@ contract DeployProtocolScript is Script {
     function setUp() public {}
 
     function run() public {
-        // Use the private key directly from the command line parameter
-        address deployer = msg.sender;
+        // Pull address from account
+        deployer = 0x76F2DAD4741CB0f4C8C56361d8cF5E05Bc01Bf28;
         console.log("Deploying from:", deployer);
 
-        vm.startBroadcast();
+        vm.startBroadcast(deployer);
 
         // Deploy core infrastructure
-        deployInfrastructure(deployer);
+        deployInfrastructure();
 
         // Log all deployed contracts
         logDeployedContracts();
@@ -43,7 +44,7 @@ contract DeployProtocolScript is Script {
         vm.stopBroadcast();
     }
 
-    function deployInfrastructure(address deployer) internal {
+    function deployInfrastructure() internal {
         // Deploy Role Manager first for better access control
         roleManager = new RoleManager();
 
@@ -104,6 +105,7 @@ contract DeployProtocolScript is Script {
         uint256 initialPrice = 1e18; // $1.00 with 18 decimals
         priceOracle = new PriceOracleReporter(initialPrice, MANAGER_1, 100, 3600); // 1% max change per hour
         priceOracle.setUpdater(MANAGER_1, true);
+        priceOracle.transferOwnership(MANAGER_1);
         console.log("Price Oracle Reporter deployed.");
 
         // Deploy ManagedWithdrawReportedStrategy implementation to be used as a template
@@ -126,6 +128,7 @@ contract DeployProtocolScript is Script {
         // KYC roles
         roleManager.grantRole(MANAGER_1, roleManager.RULES_ADMIN());
         roleManager.grantRole(MANAGER_1, roleManager.KYC_OPERATOR());
+        roleManager.grantRole(deployer, roleManager.KYC_OPERATOR());
     }
 
     function logDeployedContracts() internal view {
