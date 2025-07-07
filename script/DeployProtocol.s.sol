@@ -29,10 +29,10 @@ contract DeployProtocolScript is Script {
 
     function run() public {
         // Use the private key directly from the command line parameter
-        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
-        address deployer = vm.addr(deployerPrivateKey);
+        address deployer = msg.sender;
+        console.log("Deploying from:", deployer);
 
-        vm.startBroadcast(deployerPrivateKey);
+        vm.startBroadcast();
 
         // Deploy core infrastructure
         deployInfrastructure(deployer);
