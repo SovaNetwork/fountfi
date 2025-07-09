@@ -1,5 +1,5 @@
 # MockERC20
-[Git Source](https://github.com/SovaNetwork/fountfi/blob/a2137abe6629a13ef56e85f61ccb9fcfe0d3f27a/src/mocks/MockERC20.sol)
+[Git Source](https://github.com/SovaNetwork/fountfi/blob/58164582109e1a7de75ddd7e30bfe628ac79d7fd/src/mocks/MockERC20.sol)
 
 **Inherits:**
 ERC20, Ownable
@@ -98,7 +98,7 @@ Mint tokens to a specified address
 
 
 ```solidity
-function mint(address to, uint256 amount) external onlyOwner;
+function mint(address to, uint256 amount) external;
 ```
 **Parameters**
 
@@ -114,7 +114,7 @@ Burn tokens from a specified address
 
 
 ```solidity
-function burn(address from, uint256 amount) external onlyOwner;
+function burn(address from, uint256 amount) external;
 ```
 **Parameters**
 

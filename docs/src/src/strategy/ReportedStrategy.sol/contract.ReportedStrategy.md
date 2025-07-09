@@ -1,5 +1,5 @@
 # ReportedStrategy
-[Git Source](https://github.com/SovaNetwork/fountfi/blob/a2137abe6629a13ef56e85f61ccb9fcfe0d3f27a/src/strategy/ReportedStrategy.sol)
+[Git Source](https://github.com/SovaNetwork/fountfi/blob/58164582109e1a7de75ddd7e30bfe628ac79d7fd/src/strategy/ReportedStrategy.sol)
 
 **Inherits:**
 [BasicStrategy](/src/strategy/BasicStrategy.sol/abstract.BasicStrategy.md)
@@ -13,7 +13,7 @@ The reporter contract
 
 
 ```solidity
-BaseReporter public reporter;
+IReporter public reporter;
 ```
 
 

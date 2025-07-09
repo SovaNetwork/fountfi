@@ -57,6 +57,7 @@ interface IStrategy {
     //////////////////////////////////////////////////////////////*/
 
     function asset() external view returns (address);
+    function assetDecimals() external view returns (uint8);
     function sToken() external view returns (address);
     function balance() external view returns (uint256);
 }

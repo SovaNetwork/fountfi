@@ -24,6 +24,8 @@ abstract contract BasicStrategy is IStrategy, CloneableRoleManaged {
     address public manager;
     /// @notice The asset of the strategy
     address public asset;
+    /// @notice The decimals of the asset
+    uint8 public assetDecimals;
     /// @notice The sToken of the strategy
     address public sToken;
 
@@ -63,6 +65,7 @@ abstract contract BasicStrategy is IStrategy, CloneableRoleManaged {
         // Unlike other protocol roles, only a single manager is allowed
         manager = manager_;
         asset = asset_;
+        assetDecimals = assetDecimals_;
         _initializeRoleManager(roleManager_);
 
         sToken = _deployToken(name_, symbol_, asset, assetDecimals_);

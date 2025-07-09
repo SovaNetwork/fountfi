@@ -1,5 +1,5 @@
 # KycRulesHook
-[Git Source](https://github.com/SovaNetwork/fountfi/blob/a2137abe6629a13ef56e85f61ccb9fcfe0d3f27a/src/hooks/KycRulesHook.sol)
+[Git Source](https://github.com/SovaNetwork/fountfi/blob/58164582109e1a7de75ddd7e30bfe628ac79d7fd/src/hooks/KycRulesHook.sol)
 
 **Inherits:**
 [BaseHook](/src/hooks/BaseHook.sol/abstract.BaseHook.md), [RoleManaged](/src/auth/RoleManaged.sol/abstract.RoleManaged.md)
@@ -149,6 +149,51 @@ function isAllowed(address account) public view returns (bool);
 |Name|Type|Description|
 |----|----|-----------|
 |`<none>`|`bool`|Whether the address is allowed|
+
+
+### _allow
+
+Internal function to allow an address
+
+
+```solidity
+function _allow(address account) internal;
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`account`|`address`|Address to allow|
+
+
+### _deny
+
+Internal function to deny an address
+
+
+```solidity
+function _deny(address account) internal;
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`account`|`address`|Address to deny|
+
+
+### _reset
+
+Internal function to reset an address
+
+
+```solidity
+function _reset(address account) internal;
+```
+**Parameters**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`account`|`address`|Address to reset|
 
 
 ### onBeforeTransfer

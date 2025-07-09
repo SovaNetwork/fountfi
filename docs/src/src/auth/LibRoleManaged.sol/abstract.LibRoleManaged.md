@@ -1,5 +1,5 @@
 # LibRoleManaged
-[Git Source](https://github.com/SovaNetwork/fountfi/blob/a2137abe6629a13ef56e85f61ccb9fcfe0d3f27a/src/auth/LibRoleManaged.sol)
+[Git Source](https://github.com/SovaNetwork/fountfi/blob/58164582109e1a7de75ddd7e30bfe628ac79d7fd/src/auth/LibRoleManaged.sol)
 
 Logical library for role-managed contracts. Can be inherited by
 both deployable and cloneable versions of RoleManaged.

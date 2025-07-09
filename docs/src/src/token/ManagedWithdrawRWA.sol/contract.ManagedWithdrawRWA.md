@@ -1,5 +1,5 @@
 # ManagedWithdrawRWA
-[Git Source](https://github.com/SovaNetwork/fountfi/blob/a2137abe6629a13ef56e85f61ccb9fcfe0d3f27a/src/token/ManagedWithdrawRWA.sol)
+[Git Source](https://github.com/SovaNetwork/fountfi/blob/58164582109e1a7de75ddd7e30bfe628ac79d7fd/src/token/ManagedWithdrawRWA.sol)
 
 **Inherits:**
 [tRWA](/src/token/tRWA.sol/contract.tRWA.md)
@@ -122,28 +122,6 @@ function redeem(uint256 shares, address to, address owner) public override onlyS
 |Name|Type|Description|
 |----|----|-----------|
 |`assets`|`uint256`|The amount of assets received|
-
-
-### _withdraw
-
-Override _withdraw to skip transferAssets since we already collected
-
-
-```solidity
-function _withdraw(address by, address to, address owner, uint256 assets, uint256 shares)
-    internal
-    override
-    nonReentrant;
-```
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`by`|`address`|Address initiating the withdrawal|
-|`to`|`address`|Address receiving the assets|
-|`owner`|`address`|Address that owns the shares|
-|`assets`|`uint256`|Amount of assets to withdraw|
-|`shares`|`uint256`|Amount of shares to burn|
 
 
 ## Errors

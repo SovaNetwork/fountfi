@@ -1,5 +1,5 @@
 # RoleManaged
-[Git Source](https://github.com/SovaNetwork/fountfi/blob/a2137abe6629a13ef56e85f61ccb9fcfe0d3f27a/src/auth/RoleManaged.sol)
+[Git Source](https://github.com/SovaNetwork/fountfi/blob/58164582109e1a7de75ddd7e30bfe628ac79d7fd/src/auth/RoleManaged.sol)
 
 **Inherits:**
 [LibRoleManaged](/src/auth/LibRoleManaged.sol/abstract.LibRoleManaged.md)

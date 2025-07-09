@@ -1,5 +1,5 @@
 # RoleManager
-[Git Source](https://github.com/SovaNetwork/fountfi/blob/a2137abe6629a13ef56e85f61ccb9fcfe0d3f27a/src/auth/RoleManager.sol)
+[Git Source](https://github.com/SovaNetwork/fountfi/blob/58164582109e1a7de75ddd7e30bfe628ac79d7fd/src/auth/RoleManager.sol)
 
 **Inherits:**
 OwnableRoles, [IRoleManager](/src/auth/IRoleManager.sol/interface.IRoleManager.md)
@@ -42,20 +42,6 @@ uint256 public constant STRATEGY_OPERATOR = 1 << 4;
 
 ```solidity
 uint256 public constant KYC_OPERATOR = 1 << 5;
-```
-
-
-### STRATEGY_ANY
-
-```solidity
-uint256 public constant STRATEGY_ANY = PROTOCOL_ADMIN | STRATEGY_ADMIN | STRATEGY_OPERATOR;
-```
-
-
-### RULES_ANY
-
-```solidity
-uint256 public constant RULES_ANY = PROTOCOL_ADMIN | RULES_ADMIN | KYC_OPERATOR;
 ```
 
 
@@ -197,62 +183,4 @@ function _setInitialAdminRole(uint256 targetRole, uint256 adminRole) internal;
 |`targetRole`|`uint256`|The role whose admin role is to be set|
 |`adminRole`|`uint256`|The role that will be required to manage the targetRole|
 
-
-## Events
-### RoleGranted
-Emitted when a role is granted to a user
-
-
-```solidity
-event RoleGranted(address indexed user, uint256 indexed role, address indexed sender);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`user`|`address`|The address of the user|
-|`role`|`uint256`|The role that was granted|
-|`sender`|`address`|The address that granted the role|
-
-### RoleRevoked
-Emitted when a role is revoked from a user
-
-
-```solidity
-event RoleRevoked(address indexed user, uint256 indexed role, address indexed sender);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`user`|`address`|The address of the user|
-|`role`|`uint256`|The role that was revoked|
-|`sender`|`address`|The address that revoked the role|
-
-### RoleAdminSet
-Emitted when the admin role for a target role is updated.
-
-
-```solidity
-event RoleAdminSet(uint256 indexed targetRole, uint256 indexed adminRole, address indexed sender);
-```
-
-**Parameters**
-
-|Name|Type|Description|
-|----|----|-----------|
-|`targetRole`|`uint256`|The role whose admin is being changed.|
-|`adminRole`|`uint256`|The new role required to manage the targetRole (0 means revert to owner/PROTOCOL_ADMIN).|
-|`sender`|`address`|The address that performed the change.|
-
-## Errors
-### InvalidRole
-Emitted for 0 role in arguments
-
-
-```solidity
-error InvalidRole();
-```
 

@@ -76,8 +76,15 @@ contract ReportedStrategy is BasicStrategy {
         uint256 _pricePerShare = abi.decode(reporter.report(), (uint256));
         uint256 totalSupply = IERC20(sToken).totalSupply();
 
-        // Calculate total assets: pricePerShare * totalSupply / 1e18
-        return _pricePerShare.mulWad(totalSupply);
+        // Get sToken decimals dynamically
+        uint8 sTokenDecimals = IERC20(sToken).decimals();
+
+        // pricePerShare (18 decimals) * totalSupply (sTokenDecimals) needs to be scaled to asset decimals
+        // We divide by 10^(18 + sTokenDecimals - assetDecimals) to get the result in asset decimals
+        uint256 scalingFactor = 10 ** (18 + sTokenDecimals - assetDecimals);
+
+        // Scale to asset decimals
+        return _pricePerShare.mulDiv(totalSupply, scalingFactor);
     }
 
     /**

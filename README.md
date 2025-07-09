@@ -2,6 +2,26 @@
 
 Fountfi is a protocol for tokenizing Real World Assets (RWA) on-chain, providing a secure and compliant framework for bringing traditional finance assets into DeFi.
 
+## Deployments
+
+### Base V1 Deployment \[2025-07-07\]
+
+__Git Tag:__ `deploy-2050707`
+
+__Audit:__ [Omniscia Audit Report](https://omniscia.io/reports/sova-network-fountfi-protocol-684adfa36579f5001821a219/)
+
+__Deployer:__ [`0x76F2DAD4741CB0f4C8C56361d8cF5E05Bc01Bf28`](https://basescan.org/address/0x76f2dad4741cb0f4c8c56361d8cf5e05bc01bf28)
+
+| Contract | Address |
+|----------|---------|
+| Role Manager | [`0x6c826Ea5664d64F570ed50d82107593c33af8A47`](https://basescan.org/address/0x6c826Ea5664d64F570ed50d82107593c33af8A47) |
+| Registry | [`0x50f4EF3B29362abA1B9EA88E600B016d99c44C3E`](https://basescan.org/address/0x50f4EF3B29362abA1B9EA88E600B016d99c44C3E) |
+| Conduit | [`0x66Df6ECcC14D8bd12249b587835D92125e9DBe71`](https://basescan.org/address/0x66Df6ECcC14D8bd12249b587835D92125e9DBe71) |
+| KYC Rules Hook | [`0xD1b225374c64C87Cf0909910AF34e54021EFaEaA`](https://basescan.org/address/0xD1b225374c64C87Cf0909910AF34e54021EFaEaA) |
+| Price Oracle Reporter | [`0xB8bBabD3134C18cA705dA904A73A86CB1001955a`](https://basescan.org/address/0xB8bBabD3134C18cA705dA904A73A86CB1001955a) |
+| Strategy Implementation | [`0x66CA4C7973A73fd243563D068452F8D1C2D1E123`](https://basescan.org/address/0x66CA4C7973A73fd243563D068452F8D1C2D1E123) |
+| Mock USD Token | [`0x295F16c13feA14c55289d16D83b2ABAAD3B820f3`](https://basescan.org/address/0x295F16c13feA14c55289d16D83b2ABAAD3B820f3) |
+
 ## Key Terms and Concepts
 
 - **tRWA (Tokenized Real World Asset)**: An ERC4626-compatible token that represents ownership shares in an underlying real-world asset strategy.

@@ -1,8 +1,10 @@
 # GatedMintRWA
-[Git Source](https://github.com/SovaNetwork/fountfi/blob/a2137abe6629a13ef56e85f61ccb9fcfe0d3f27a/src/token/GatedMintRWA.sol)
+[Git Source](https://github.com/SovaNetwork/fountfi/blob/58164582109e1a7de75ddd7e30bfe628ac79d7fd/src/token/GatedMintRWA.sol)
 
 **Inherits:**
 [tRWA](/src/token/tRWA.sol/contract.tRWA.md)
+
+FIXME: Add slippage protection before using in production!
 
 Extension of tRWA that implements a two-phase deposit process using an Escrow
 
@@ -140,20 +142,15 @@ Mint shares for a batch of accepted deposits with equal share pricing
 
 
 ```solidity
-function batchMintShares(
-    bytes32[] calldata ids,
-    address[] calldata recipients,
-    uint256[] calldata assetAmounts,
-    uint256 totalAssets
-) external;
+function batchMintShares(address[] calldata recipients, uint256[] calldata assetAmounts, uint256 totalAssets)
+    external;
 ```
 **Parameters**
 
 |Name|Type|Description|
 |----|----|-----------|
-|`ids`|`bytes32[]`|Array of deposit IDs being processed in this batch|
-|`recipients`|`address[]`|Array of recipient addresses aligned with ids|
-|`assetAmounts`|`uint256[]`|Array of asset amounts aligned with ids|
+|`recipients`|`address[]`|Array of recipient addresses|
+|`assetAmounts`|`uint256[]`|Array of asset amounts aligned with recipients|
 |`totalAssets`|`uint256`|Total assets in the batch (sum of assetAmounts)|
 
 
@@ -187,7 +184,13 @@ Get details for a specific deposit (from Escrow)
 function getDepositDetails(bytes32 depositId)
     public
     view
-    returns (address depositor, address recipient, uint256 assetAmount, uint256 expirationTime, uint8 state);
+    returns (
+        address depositor,
+        address recipient,
+        uint256 assetAmount,
+        uint256 expirationTime,
+        GatedMintEscrow.DepositState state
+    );
 ```
 **Parameters**
 
@@ -203,7 +206,7 @@ function getDepositDetails(bytes32 depositId)
 |`recipient`|`address`|The address that will receive shares if approved|
 |`assetAmount`|`uint256`|The amount of assets deposited|
 |`expirationTime`|`uint256`|The timestamp after which deposit can be reclaimed|
-|`state`|`uint8`|The current state of the deposit (0=PENDING, 1=ACCEPTED, 2=REFUNDED)|
+|`state`|`GatedMintEscrow.DepositState`|The current state of the deposit (0=PENDING, 1=ACCEPTED, 2=REFUNDED)|
 
 
 ## Events
@@ -222,7 +225,7 @@ event DepositExpirationPeriodUpdated(uint256 oldPeriod, uint256 newPeriod);
 ### BatchSharesMinted
 
 ```solidity
-event BatchSharesMinted(bytes32[] depositIds, uint256 totalAssets, uint256 totalShares);
+event BatchSharesMinted(uint256 totalAssets, uint256 totalShares);
 ```
 
 ## Errors

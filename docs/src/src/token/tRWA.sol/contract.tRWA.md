@@ -1,5 +1,5 @@
 # tRWA
-[Git Source](https://github.com/SovaNetwork/fountfi/blob/a2137abe6629a13ef56e85f61ccb9fcfe0d3f27a/src/token/tRWA.sol)
+[Git Source](https://github.com/SovaNetwork/fountfi/blob/58164582109e1a7de75ddd7e30bfe628ac79d7fd/src/token/tRWA.sol)
 
 **Inherits:**
 ERC4626, [ItRWA](/src/token/ItRWA.sol/interface.ItRWA.md), ReentrancyGuard
@@ -78,6 +78,15 @@ Mapping of operation type to hook information
 
 ```solidity
 mapping(bytes32 => HookInfo[]) public operationHooks;
+```
+
+
+### lastExecutedBlock
+Mapping of operation type to the last block number it was executed
+
+
+```solidity
+mapping(bytes32 => uint256) public lastExecutedBlock;
 ```
 
 
@@ -438,7 +447,6 @@ Hook information structure
 struct HookInfo {
     IHook hook;
     uint256 addedAtBlock;
-    bool hasProcessedOperations;
 }
 ```
 

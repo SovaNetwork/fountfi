@@ -14,6 +14,7 @@ import {RoleManager} from "../auth/RoleManager.sol";
 contract MockStrategy is IStrategy {
     address public manager;
     address public asset;
+    uint8 public assetDecimals;
     address public sToken;
     address public deployer;
     address public controller;
@@ -52,6 +53,7 @@ contract MockStrategy is IStrategy {
         deployer = msg.sender;
         manager = manager_;
         asset = asset_;
+        assetDecimals = assetDecimals_;
         roleManager = RoleManager(roleManager_);
         _balance = 0;
 

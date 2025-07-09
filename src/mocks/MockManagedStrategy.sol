@@ -16,6 +16,7 @@ contract MockManagedStrategy is IStrategy {
 
     address public manager;
     address public asset;
+    uint8 public assetDecimals;
     address public sToken;
     address public deployer;
     address public controller;
@@ -48,6 +49,8 @@ contract MockManagedStrategy is IStrategy {
 
         manager = manager_;
         asset = asset_;
+        assetDecimals = 18;
+
         roleManager = RoleManager(roleManager_);
         deployer = msg.sender;
 

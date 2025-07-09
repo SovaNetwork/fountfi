@@ -1,5 +1,5 @@
 # ManagedWithdrawReportedStrategy
-[Git Source](https://github.com/SovaNetwork/fountfi/blob/a2137abe6629a13ef56e85f61ccb9fcfe0d3f27a/src/strategy/ManagedWithdrawRWAStrategy.sol)
+[Git Source](https://github.com/SovaNetwork/fountfi/blob/58164582109e1a7de75ddd7e30bfe628ac79d7fd/src/strategy/ManagedWithdrawRWAStrategy.sol)
 
 **Inherits:**
 [ReportedStrategy](/src/strategy/ReportedStrategy.sol/contract.ReportedStrategy.md)
@@ -22,13 +22,6 @@ bytes32 private constant EIP712_DOMAIN_TYPEHASH =
 bytes32 private constant WITHDRAWAL_REQUEST_TYPEHASH = keccak256(
     "WithdrawalRequest(address owner,address to,uint256 shares,uint256 minAssets,uint96 nonce,uint96 expirationTime)"
 );
-```
-
-
-### DOMAIN_SEPARATOR
-
-```solidity
-bytes32 private DOMAIN_SEPARATOR;
 ```
 
 
@@ -143,11 +136,11 @@ function batchRedeem(WithdrawalRequest[] calldata requests, Signature[] calldata
 
 ### _validateRedeem
 
-Validate a withdrawal request's arguments
+Validate a withdrawal request's arguments and consume the nonce
 
 
 ```solidity
-function _validateRedeem(WithdrawalRequest calldata request) internal view;
+function _validateRedeem(WithdrawalRequest calldata request) internal;
 ```
 **Parameters**
 
@@ -170,6 +163,21 @@ function _verifySignature(WithdrawalRequest calldata request, Signature calldata
 |----|----|-----------|
 |`request`|`WithdrawalRequest`|The withdrawal request|
 |`signature`|`Signature`|The signature|
+
+
+### _domainSeparator
+
+Calculate the EIP-712 domain separator
+
+
+```solidity
+function _domainSeparator() internal view returns (bytes32);
+```
+**Returns**
+
+|Name|Type|Description|
+|----|----|-----------|
+|`<none>`|`bytes32`|The domain separator|
 
 
 ## Events
