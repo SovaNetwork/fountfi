@@ -77,15 +77,14 @@ contract DirectManagedStrategyTest is BaseFountfiTest {
         strategy = new DirectManagedStrategy();
 
         // Initialize strategy with issuer wallet
-        strategy.initializeWithIssuerWallet(
+        strategy.initialize(
             "DirectManaged RWA Token",
             "dmRWA",
             address(roleManager),
             manager,
             address(usdc),
             USDC_DECIMALS,
-            address(reporter),
-            issuerWallet
+            abi.encode(address(reporter), issuerWallet)
         );
 
         directManagedRWA = DirectManagedRWA(strategy.sToken());
@@ -121,15 +120,14 @@ contract DirectManagedStrategyTest is BaseFountfiTest {
         vm.expectEmit(true, true, true, true);
         emit SetIssuerWallet(address(0), issuerWallet);
 
-        newStrategy.initializeWithIssuerWallet(
+        newStrategy.initialize(
             "Test Token",
             "TEST",
             owner, // Using owner as roleManager for tests
             manager,
             address(usdc),
             USDC_DECIMALS,
-            address(reporter),
-            issuerWallet
+            abi.encode(address(reporter), issuerWallet)
         );
 
         assertEq(newStrategy.issuerWallet(), issuerWallet);
@@ -148,43 +146,40 @@ contract DirectManagedStrategyTest is BaseFountfiTest {
         DirectManagedStrategy newStrategy = new DirectManagedStrategy();
 
         vm.expectRevert(IDirectDepositStrategy.InvalidIssuerWallet.selector);
-        newStrategy.initializeWithIssuerWallet(
+        newStrategy.initialize(
             "Test Token",
             "TEST",
             owner, // Using owner as roleManager for tests
             manager,
             address(usdc),
             USDC_DECIMALS,
-            address(reporter),
-            address(0) // Zero issuer wallet
+            abi.encode(address(reporter), address(0)) // Zero issuer wallet
         );
     }
 
     function test_InitializeWithIssuerWallet_RevertAlreadyInitialized() public {
         DirectManagedStrategy newStrategy = new DirectManagedStrategy();
 
-        newStrategy.initializeWithIssuerWallet(
+        newStrategy.initialize(
             "Test Token",
             "TEST",
             owner, // Using owner as roleManager for tests
             manager,
             address(usdc),
             USDC_DECIMALS,
-            address(reporter),
-            issuerWallet
+            abi.encode(address(reporter), issuerWallet)
         );
 
         // Try to initialize again
         vm.expectRevert();
-        newStrategy.initializeWithIssuerWallet(
+        newStrategy.initialize(
             "Test Token 2",
             "TEST2",
             owner, // Using owner as roleManager for tests
             manager,
             address(usdc),
             USDC_DECIMALS,
-            address(reporter),
-            issuerWallet
+            abi.encode(address(reporter), issuerWallet)
         );
     }
 

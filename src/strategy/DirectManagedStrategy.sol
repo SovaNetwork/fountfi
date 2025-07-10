@@ -37,19 +37,20 @@ contract DirectManagedStrategy is ManagedWithdrawReportedStrategy, IDirectDeposi
      * @param manager_ Address of the manager
      * @param asset_ Address of the underlying asset
      * @param assetDecimals_ Decimals of the asset
-     * @param reporter_ Address of the reporter
-     * @param issuerWallet_ Address of the issuer wallet
+     * @param extraData Encoded reporter and issuer wallet addresses
      */
-    function initializeWithIssuerWallet(
+    function initialize(
         string calldata name_,
         string calldata symbol_,
         address roleManager_,
         address manager_,
         address asset_,
         uint8 assetDecimals_,
-        address reporter_,
-        address issuerWallet_
-    ) external {
+        bytes memory extraData
+    ) public override(ManagedWithdrawReportedStrategy, IStrategy) {
+        // Decode reporter and issuer wallet from extraData
+        (address reporter_, address issuerWallet_) = abi.decode(extraData, (address, address));
+
         // Set issuer wallet
         if (issuerWallet_ == address(0)) revert InvalidIssuerWallet();
         issuerWallet = issuerWallet_;

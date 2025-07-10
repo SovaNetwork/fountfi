@@ -83,7 +83,7 @@ contract ManagedWithdrawReportedStrategy is ReportedStrategy {
         address asset_,
         uint8 assetDecimals_,
         bytes memory initData
-    ) public override {
+    ) public virtual override {
         super.initialize(name_, symbol_, roleManager_, manager_, asset_, assetDecimals_, initData);
     }
 

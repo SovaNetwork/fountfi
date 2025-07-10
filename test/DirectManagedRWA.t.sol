@@ -95,15 +95,14 @@ contract DirectManagedRWATest is BaseFountfiTest {
         strategy = new DirectManagedStrategy();
 
         // Initialize strategy with issuer wallet
-        strategy.initializeWithIssuerWallet(
+        strategy.initialize(
             "DirectManaged RWA Token",
             "dmRWA",
             address(roleManager),
             manager,
             address(usdc),
             USDC_DECIMALS,
-            address(reporter),
-            issuerWallet
+            abi.encode(address(reporter), issuerWallet)
         );
 
         directManagedRWA = DirectManagedRWA(strategy.sToken());
