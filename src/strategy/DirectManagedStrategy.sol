@@ -18,6 +18,8 @@ import {RoleManaged} from "../auth/RoleManaged.sol";
 contract DirectManagedStrategy is ManagedWithdrawReportedStrategy, IDirectDepositStrategy {
     using SafeTransferLib for address;
 
+    event TokenInitialized(address indexed token);
+
     /*//////////////////////////////////////////////////////////////
                                 STATE
     //////////////////////////////////////////////////////////////*/
@@ -78,9 +80,25 @@ contract DirectManagedStrategy is ManagedWithdrawReportedStrategy, IDirectDeposi
         override
         returns (address)
     {
-        DirectManagedRWA newToken = new DirectManagedRWA(name_, symbol_, asset_, assetDecimals_, address(this));
+        // DirectManagedRWA newToken = new DirectManagedRWA(name_, symbol_, asset_, assetDecimals_, address(this));
+        address newToken = address(0);
 
         return address(newToken);
+    }
+
+    /**
+     * @notice Initialization of the tRWA token called by the manager. Token must be separately deployed.
+     * @dev TEMPORARY solution to contract size issues
+     * @param token Address of the already deployed token
+     */
+    function initializeToken(address token) external onlyRoles(roleManager.STRATEGY_ADMIN()) {
+        // Initialize the token with the issuer wallet
+        if (sToken != address(0)) revert TokenAlreadyDeployed();
+        if (token == address(0)) revert InvalidAddress();
+
+        sToken = token;
+
+        emit TokenInitialized(sToken);
     }
 
     /*//////////////////////////////////////////////////////////////
