@@ -195,10 +195,10 @@ contract DirectDepositRWATest is BaseFountfiTest {
         // Alice gets full conversion (first depositor)
         assertEq(token.balanceOf(alice), INITIAL_DEPOSIT * 10 ** 12, "Alice shares incorrect");
         // Bob and Charlie get proportional shares based on the exchange rate after Alice
-        // When balance in WAD = supply in shares, 1 asset unit = 1 share unit
-        assertEq(token.balanceOf(bob), SMALL_DEPOSIT, "Bob shares incorrect");
-        // Charlie might get 1 extra share due to rounding
-        assertLe(token.balanceOf(charlie) - (INITIAL_DEPOSIT * 2), 1, "Charlie shares should be close to expected");
+        // With 18 decimal shares and 6 decimal assets, shares = assets * 10^12
+        assertEq(token.balanceOf(bob), SMALL_DEPOSIT * 10 ** 12, "Bob shares incorrect");
+        // Charlie gets proportional shares
+        assertEq(token.balanceOf(charlie), (INITIAL_DEPOSIT * 2) * 10 ** 12, "Charlie shares incorrect");
 
         // Check all pending cleared
         assertEq(token.totalPendingAssets(), 0, "Total pending assets should be zero");
@@ -444,8 +444,8 @@ contract DirectDepositRWATest is BaseFountfiTest {
         // Verify all users got shares
         for (uint256 i = 0; i < numDeposits; i++) {
             address user = address(uint160(1000 + i));
-            // First user gets full conversion, rest get proportional
-            uint256 expectedShares = i == 0 ? SMALL_DEPOSIT * 10 ** 12 : SMALL_DEPOSIT;
+            // All users get shares = assets * 10^12 (18 decimal shares, 6 decimal assets)
+            uint256 expectedShares = SMALL_DEPOSIT * 10 ** 12;
             assertEq(token.balanceOf(user), expectedShares, "User should have shares");
         }
     }

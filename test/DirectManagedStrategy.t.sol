@@ -6,6 +6,7 @@ import {DirectManagedRWA} from "../src/token/DirectManagedRWA.sol";
 import {DirectManagedStrategy} from "../src/strategy/DirectManagedStrategy.sol";
 import {ManagedWithdrawReportedStrategy} from "../src/strategy/ManagedWithdrawRWAStrategy.sol";
 import {IDirectDepositStrategy} from "../src/strategy/IDirectDepositStrategy.sol";
+import {IStrategy} from "../src/strategy/IStrategy.sol";
 import {MockConduitForDirectDeposit} from "../src/mocks/MockConduitForDirectDeposit.sol";
 import {MockReporter} from "../src/mocks/MockReporter.sol";
 import {ECDSA} from "solady/utils/ECDSA.sol";
@@ -41,6 +42,7 @@ contract DirectManagedStrategyTest is BaseFountfiTest {
     // Events
     event SetIssuerWallet(address indexed oldWallet, address indexed newWallet);
     event WithdrawalNonceUsed(address indexed owner, uint96 nonce);
+    event TokenInitialized(address indexed token);
 
     function setUp() public override {
         super.setUp();
@@ -62,6 +64,7 @@ contract DirectManagedStrategyTest is BaseFountfiTest {
 
         // Deploy RoleManager
         roleManager = new RoleManager();
+        roleManager.grantRole(owner, roleManager.STRATEGY_ADMIN());
         roleManager.grantRole(owner, roleManager.STRATEGY_OPERATOR());
         roleManager.grantRole(manager, roleManager.STRATEGY_OPERATOR());
 
@@ -87,7 +90,13 @@ contract DirectManagedStrategyTest is BaseFountfiTest {
             abi.encode(address(reporter), issuerWallet)
         );
 
-        directManagedRWA = DirectManagedRWA(strategy.sToken());
+        // Deploy DirectManagedRWA separately
+        directManagedRWA =
+            new DirectManagedRWA("DirectManaged RWA Token", "dmRWA", address(usdc), USDC_DECIMALS, address(strategy));
+
+        // Initialize token on strategy
+        vm.prank(owner);
+        strategy.initializeToken(address(directManagedRWA));
 
         // Setup initial balances and approvals
         usdc.mint(address(this), 1000000e6);
@@ -117,13 +126,17 @@ contract DirectManagedStrategyTest is BaseFountfiTest {
     function test_InitializeWithIssuerWallet_Success() public {
         DirectManagedStrategy newStrategy = new DirectManagedStrategy();
 
+        // Create a new RoleManager for this test
+        RoleManager newRoleManager = new RoleManager();
+        newRoleManager.grantRole(owner, newRoleManager.STRATEGY_ADMIN());
+
         vm.expectEmit(true, true, true, true);
         emit SetIssuerWallet(address(0), issuerWallet);
 
         newStrategy.initialize(
             "Test Token",
             "TEST",
-            owner, // Using owner as roleManager for tests
+            address(newRoleManager),
             manager,
             address(usdc),
             USDC_DECIMALS,
@@ -133,10 +146,19 @@ contract DirectManagedStrategyTest is BaseFountfiTest {
         assertEq(newStrategy.issuerWallet(), issuerWallet);
         assertEq(newStrategy.manager(), manager);
         assertEq(newStrategy.asset(), address(usdc));
-        assertTrue(newStrategy.sToken() != address(0));
+        assertEq(newStrategy.sToken(), address(0)); // Token not yet initialized
 
-        // Verify DirectManagedRWA was deployed
-        DirectManagedRWA token = DirectManagedRWA(newStrategy.sToken());
+        // Deploy and initialize DirectManagedRWA
+        DirectManagedRWA token =
+            new DirectManagedRWA("Test Token", "TEST", address(usdc), USDC_DECIMALS, address(newStrategy));
+
+        vm.expectEmit(true, true, true, true);
+        emit TokenInitialized(address(token));
+
+        vm.prank(owner);
+        newStrategy.initializeToken(address(token));
+
+        assertEq(newStrategy.sToken(), address(token));
         assertEq(token.name(), "Test Token");
         assertEq(token.symbol(), "TEST");
         assertEq(token.strategy(), address(newStrategy));
@@ -155,6 +177,53 @@ contract DirectManagedStrategyTest is BaseFountfiTest {
             USDC_DECIMALS,
             abi.encode(address(reporter), address(0)) // Zero issuer wallet
         );
+    }
+
+    function test_InitializeToken_RevertAlreadyDeployed() public {
+        DirectManagedStrategy newStrategy = new DirectManagedStrategy();
+
+        newStrategy.initialize(
+            "Test Token",
+            "TEST",
+            address(roleManager),
+            manager,
+            address(usdc),
+            USDC_DECIMALS,
+            abi.encode(address(reporter), issuerWallet)
+        );
+
+        // Deploy and initialize first token
+        DirectManagedRWA token1 =
+            new DirectManagedRWA("Test Token 1", "TEST1", address(usdc), USDC_DECIMALS, address(newStrategy));
+
+        vm.prank(owner);
+        newStrategy.initializeToken(address(token1));
+
+        // Try to initialize another token
+        DirectManagedRWA token2 =
+            new DirectManagedRWA("Test Token 2", "TEST2", address(usdc), USDC_DECIMALS, address(newStrategy));
+
+        vm.expectRevert(IStrategy.TokenAlreadyDeployed.selector);
+        vm.prank(owner);
+        newStrategy.initializeToken(address(token2));
+    }
+
+    function test_InitializeToken_RevertInvalidAddress() public {
+        DirectManagedStrategy newStrategy = new DirectManagedStrategy();
+
+        newStrategy.initialize(
+            "Test Token",
+            "TEST",
+            address(roleManager),
+            manager,
+            address(usdc),
+            USDC_DECIMALS,
+            abi.encode(address(reporter), issuerWallet)
+        );
+
+        vm.expectRevert(IStrategy.InvalidAddress.selector);
+        vm.prank(owner);
+        newStrategy.initializeToken(address(0));
     }
 
     function test_InitializeWithIssuerWallet_RevertAlreadyInitialized() public {
